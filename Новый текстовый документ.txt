@@ -1,0 +1,475 @@
+# Tile Puzzle Home MVP
+
+## Исполнительное резюме
+
+Ниже — единый production-ready файл для художника и сборки контента в Unity 6000.3.20f1 под 2D URP и WebGL / Yandex Games. Я специально сделал его не как абстрактный «арт-док», а как **очередь производства ассетов сверху вниз**: ты рисуешь по порядку, а я затем использую это как единый источник истины для сборки в Unity. Основа документа опирается на официальные рекомендации Unity по Web-памяти, компрессии текстур, Sprite Atlas, 2D URP и на требования Yandex Games к архиву, рекламным кнопкам и промоматериалам. Unity рекомендует для Web подбирать компрессию текстур под целевую платформу, держать asset data как можно меньше, включать Data Caching, а для 2D-проектов группировать спрайты по отдельным атласам по одновременно используемым наборам. Yandex Games требует один ZIP-архив с `index.html` в корне, без пробелов и кириллицы в именах файлов и папок, с нераспакованным содержимым не более 100 МБ. citeturn12view0turn13view0turn8view1turn8view9turn9view0turn9view1
+
+Для первой версии я рекомендую **максимум 2048×2048 для всех игровых атласов**, а крупные фоны и пазлы держать как отдельные файлы `2048×3584`, не атласить их в общие листы. Причина проста: в Web браузер хранит и распакованные asset data, и heap; Unity прямо пишет, что память на Web ограничивает сложность контента, а слишком большой `.data` и большие текстуры ухудшают и загрузку, и стабильность. Дополнительно для 2D URP я рекомендую **рисовать свет в самих спрайтах**, а не пытаться компенсировать стилем множеством real-time 2D lights: Unity указывает, что каждый новый Blend Style создает отдельную light render texture, поэтому в сцене лучше держать один-два Blend Style. citeturn13view0turn8view5turn7search6
+
+Есть еще одно важное производственное решение. Unity для Web рекомендует для лучшего результата делать отдельные сборки текстур хотя бы под desktop DXT и mobile ASTC; при несовпадении формата Unity использует software fallback, что повышает расход памяти и может замедлить игру. Но поскольку у Yandex Games есть ограничение по одному архиву и его суммарному размеру, в MVP разумно держать художественный бюджет скромным: все мастера в PNG/PSD/JPG, минимальное число атласов, без лишних текстурных вариаций и без шумных фактур. Это позволит выпустить первую версию одним компактным артефактным пакетом и при необходимости позже перейти на dual-build схему по Unity-шаблону. citeturn12view0turn16view0turn13view1turn9view0
+
+## Производственные правила
+
+Прежде чем идти к списку ассетов, фиксирую единые правила проекта. Это те правила, от которых я буду отталкиваться при сборке игры в Unity.
+
+**Базовая художественная гипотеза проекта.** Стиль — `cozy / pastel / warm light / soft casual`, без реализма, без грязных текстур, без кислотных цветов, без фотоколлажей. Основная эмоция: спокойствие, тепло, «еще один уютный уровень».
+
+**Базовый экран и единицы.** Референс-композиция — вертикальная, под условный экран `1080×1920`. Геймплейные фоны и пазлы — `2048×3584`. Все world sprites — **PPU = 100** как единый стандарт проекта. Pivot по умолчанию: `Center` для UI и тайлов; `Bottom Center` для мебели, растений, камина, кота и прочих сценических пропов. Это не требование Unity, а выбранная производственная конвенция для простого и предсказуемого монтажа в сценах.
+
+**Исходные форматы.** Для Unity-импорта используем только те форматы, которые официально поддерживаются движком для текстур: прежде всего `PNG`, `PSD`, `JPG`. В списке поддерживаемых текстурных форматов Unity WebP не указан, поэтому **WebP не использовать как канонический source asset для игровых спрайтов**; если нужен WebP, только как вспомогательный формат для внешнего ревью или веб-материалов вне Unity. citeturn10view1
+
+**Атласы и упаковка.** Unity рекомендует делать отдельные Sprite Atlas для наборов, используемых одновременно, чтобы не раздувать память и не провоцировать лишние draw-call комбинации. Поэтому для MVP я фиксирую отдельные атласы: `atl_board_main`, `atl_tiles_main`, `atl_ui_main`, `atl_vfx_main`; фоны и пазлы идут отдельными файлами. Для UI-атласа Rotation выключаем, потому что Unity прямо предупреждает: поворот в атласе может поворачивать Canvas UI текстуры в сцене. Padding в Sprite Atlas — не ниже `4 px`; это и дефолтное значение Unity, и практический минимум против bleed. Tight Packing включаем для тайлов и VFX, но выключаем для UI-панелей и 9-sliced элементов. Для 9-slicing Unity требует `Mesh Type = Full Rect`; Tight/rotation для таких элементов лучше не провоцировать вовсе. citeturn8view1turn11view1turn14view0
+
+**Mipmap и Read/Write.** Для UI, тайлов, иконок, FX-спрайтов и большинства 2D-элементов mipmaps отключаем: Unity пишет, что mipmaps увеличивают размер текстуры примерно на 33% на диске и в памяти и не дают пользы для UI-текстур, которые не рендерятся в уменьшающемся масштабе. Read/Write на текстурах выключаем везде, где это не нужно кодом: Unity указывает, что при включении движок держит копию для скриптового доступа, то есть фактически удваивает память текстуры. citeturn8view3turn8view4turn11view1
+
+**Web-компрессия и память.** Для Web Unity рекомендует использовать нативно поддерживаемые форматы: DXT для desktop, ASTC для mobile; ETC2 и DXT/ASTC доступны и в настройках Web Build. Для расчетов бюджета ниже я использую типовые значения Unity: DXT1 / ETC2 RGB — `4 bpp`, DXT5 / ETC2 RGBA — `8 bpp`, ASTC 6×6 — `3.56 bpp`. Это дает понятные ориентиры по GPU memory: примерно `4 МБ` на `2048×2048 RGBA` и `~7 МБ` на `2048×3584 RGBA` в DXT5 / ETC2, а в ASTC 6×6 — существенно ниже. На уровне публикации включи `Data Caching`; Unity прямо рекомендует это для Web, потому что кеширование `.data` ускоряет повторные запуски. Если хостинг позволяет, релизную сборку лучше держать на Brotli, потому что он дает лучший compression ratio; но fallback-декомпрессия увеличивает loader и менее эффективна. citeturn12view0turn16view0turn10view3turn10view4turn13view1turn8view9turn13view0
+
+**Тексты, реклама и публикация в Yandex Games.** Для релиза на Yandex тебе понадобятся игровые и маркетинговые изображения с фиксированными размерами: icon `512×512 PNG`, cover `800×470 PNG`, hero image `1560×520 PNG/JPG`; скриншоты — `16:9` или `9:16`, длинная сторона от `1280` до `2560 px`. Кнопка rewarded ad должна **явно** сообщать, что игрок посмотрит рекламу, и **какую именно награду** получит; во время полноэкранной рекламы игра и звук должны быть поставлены на паузу. Для промо-материалов Yandex требует использовать элементы именно этой игры, а скриншоты должны показывать реальный геймплей не менее чем на 70% изображения. citeturn9view0turn8view6turn8view8turn9view2
+
+Ниже — компактная таблица рабочих стандартов проекта.
+
+| Группа | Source format | Размер | Atlas assignment | Rotation | Tight Packing | Mipmaps | Read/Write | Целевой runtime формат |
+|---|---|---:|---|---|---|---|---|---|
+| Брендинг | PNG / JPG | 2048×1024 до 2048×3584 | none | n/a | n/a | Off | Off | RGB/RGBA |
+| Игровое поле | PNG | до 2048×2048 | `atl_board_main` | On | On | Off | Off | RGBA |
+| Тайлы | PNG | до 2048×2048 | `atl_tiles_main` | On | On | Off | Off | RGBA |
+| UI | PNG | до 2048×2048 | `atl_ui_main` | Off | Off | Off | Off | RGBA |
+| VFX | PNG | до 1024×1024 | `atl_vfx_main` | On | On | Off | Off | RGBA |
+| Фоны back | JPG | 2048×3584 | scene-local | n/a | n/a | Off | Off | RGB |
+| Фоны mid/front | PNG | 2048×3584 | scene-local | n/a | n/a | Off | Off | RGBA |
+| Пазлы | JPG | 2048×3584 | scene-local | n/a | n/a | Off | Off | RGB |
+| Маски пазлов / оверлеи | PNG | 2048×2048 | `atl_puzzle_overlay` | Off | Off | Off | Off | RGBA |
+| Ambient overlay | PNG | 1024×1792 или 1024×1024 | scene-local | n/a | n/a | Off | Off | RGBA |
+
+## Очередь производства ассетов
+
+Перед списком фиксирую именование и папки. Из-за требований Yandex все имена только в ASCII, нижний регистр, snake_case, без пробелов и кириллицы. Рекомендованная структура: `Assets/Art/Branding`, `Assets/Art/Atlases`, `Assets/Art/Backgrounds/bg01...bg05`, `Assets/Art/Puzzles`, `Assets/Art/Props`, `Assets/Art/VFX`, `Assets/Art/UI`, `Assets/Art/Overlays`, `Assets/Art/Fonts`. citeturn9view1
+
+**001. Логотип игры**
+
+**Технические требования.** Холст `2048×1024`. Экспорт `PNG` с прозрачным фоном. Pivot `Center`. Padding по краям не менее `96 px`. PPU `100` на случай использования в игре. Atlas assignment: `none`. Имя файла: `logo_tile_puzzle_home_main.png`. Бюджет: источник до `500 KB`, runtime в меню `~2.0 MB` как RGBA-спрайт.
+
+**Художественные требования.** Формат — мягкий wordmark, легко читаемый на светлом фоне. Основной цвет текста `#8A664E / RGB 138,102,78`; светлый блик `#FFF4E7 / 255,244,231`; теплый акцент `#F6C27A / 246,194,122`; вторичный акцент `#E8A6A1 / 232,166,161`; тень `#5B463E / 91,70,62` с непрозрачностью `18%`. Толщина основных штрихов букв — условно `26–40 px` на этом холсте. Контур жестким черным не делать. Запрещено: кислотные градиенты, стеклянный глянец, холодный синий свет, реалистичная текстура дерева в буквах.
+
+**Проверка качества.** Лого читается в ширине `320 px`; мелкие декоративные элементы не исчезают; нет грязных пикселей по краям; безопасная зона 10% вокруг композиции; файл не тяжелее целевого лимита.
+
+**AI prompt.** `Cozy casual game logo, warm pastel wordmark "Tile Puzzle Home", rounded friendly typography, soft cream highlights, warm brown lettering, peach and amber accents, subtle soft shadow, transparent background, clean vector-like edges, no realism, no metallic effect, high readability, mobile casual branding`
+
+**002. Splash-экран**
+
+**Технические требования.** Холст `2048×3584`. Экспорт: фоновая иллюстрация `JPG`, логотип отдельным `PNG`. Pivot `Center`. Padding не важен. PPU `100`. Atlas assignment: `none`. Файлы: `splash_bg_cozy_room.jpg`, `splash_logo_overlay.png`. Бюджет: фон до `1.5 MB`, лого до `500 KB`; runtime для фона как RGB около `3.5 MB`, для логотипа как RGBA около `2 MB`.
+
+**Художественные требования.** Splash должен быть простым: фоновая уютная комната, теплое утро, крупное свободное пятно под логотип в верхней трети. Палитра: `#F5EBDD / 245,235,221`, `#D8C2A8 / 216,194,168`, `#8A664E / 138,102,78`, `#F6C27A / 246,194,122`, `#9CAF88 / 156,175,136`. Свет идет сверху-слева, мягкий, как утреннее окно. Тень короткая и мягкая. Запрещено: мелкая текстура на стенах, фотографии, сюжетные персонажи, темная виньетка сильнее 10%.
+
+**Проверка качества.** На экране `1080×1920` логотип не спорит с фоном; фон не шумит; контраст под логотипом достаточный; нет деталей важнее логотипа. Жесткий лимит: итоговый JPG не больше `1.5 MB`.
+
+**AI prompt.** `Vertical cozy home splash background for a casual mobile puzzle game, warm morning light, pastel living room, soft cream walls, wooden furniture, gentle amber sun rays, uncluttered center-top space for logo, painterly 2D casual art, no characters, no photorealism, clean large shapes`
+
+**003. Иконка игры для каталога Yandex Games**
+
+**Технические требования.** Холст `512×512`. Экспорт `PNG`. Pivot `Center`. Safe padding не менее `48 px`. PPU не важен. Atlas assignment: `none`. Имя файла: `store_icon_512.png`. Бюджет: до `120 KB`. Это обязательный релизный ассет для Yandex. citeturn9view0
+
+**Художественные требования.** Внутри — один крупный узнаваемый объект: кружка + пазл-фрагмент + теплый домовой акцент. Разрешены только 2–3 крупных формы. Палитра ярче игровой: `#C97B63 / 201,123,99`, `#F6C27A / 246,194,122`, `#8A664E / 138,102,78`, `#FFF4E7 / 255,244,231`. Контур 6–8 px. Фон — простой круглый или квадратный мягкий бэкплейт. Запрещено: мелкий текст, целая сцена-комната, много мелких пропов.
+
+**Проверка качества.** Читается в `64 px`; основной объект однозначен; нет визуального мусора по краям; все важное внутри центральной зоны.
+
+**AI prompt.** `App icon for a cozy casual puzzle game, one large mug and one puzzle piece, warm pastel palette, simplified cute shapes, strong silhouette, high contrast, centered composition, transparent or simple soft background, no text, no clutter`
+
+**004. Maskable icon**
+
+**Технические требования.** Холст `512×512`. Экспорт `PNG`. Pivot `Center`. Все важное вписать в центральный круг диаметром `410 px`. Atlas assignment: `none`. Имя файла: `store_icon_maskable_512.png`. Бюджет: до `120 KB`. Yandex требует отдельную maskable-иконку с безопасной круглой зоной. citeturn9view0
+
+**Художественные требования.** Та же идея, что в основной иконке, но фон и объект нельзя доводить до краев. Используй те же цвета, композицию чуть компактнее.
+
+**Проверка качества.** При мысленном обрезании по окружности все главное сохраняется; углы не содержат сюжетной информации.
+
+**AI prompt.** `Maskable app icon for cozy puzzle game, centered mug and puzzle piece inside a safe circular zone, pastel warm colors, simple shape language, no edge-critical details, no text`
+
+**005. Обложка каталога**
+
+**Технические требования.** Холст `800×470`. Экспорт `PNG`. Pivot `Center`. Safe text area: центральные `70%` ширины и высоты. Atlas assignment: `none`. Имя файла: `store_cover_800x470.png`. Бюджет: до `250 KB`. Это обязательный релизный ассет для Yandex. citeturn9view0
+
+**Художественные требования.** Показывать реальный стиль игры: слева часть уютной комнаты, справа крупные 2–3 тайла и puzzle/progress мотив. Палитра теплая. Не рисовать фейковый геймплей. Можно небольшой слоган, но без перегруза.
+
+**Проверка качества.** На превью `400×235` понятно, что это уютная puzzle-игра; не менее 70% визуального смысла — реальный стиль игры, а не декоративный баннер. citeturn9view2
+
+**AI prompt.** `Horizontal store cover for a cozy tile puzzle game, warm home interior on one side, large readable puzzle tiles on the other, pastel warm light, clean casual 2D art, clear game identity, no fake gameplay`
+
+**006. Hero image**
+
+**Технические требования.** Холст `1560×520`. Экспорт `PNG` или `JPG`. Pivot `Center`. Atlas assignment: `none`. Имя файла: `store_hero_1560x520.jpg`. Бюджет: до `400 KB`. Это дополнительный промо-ассет для специальных коллекций Yandex. citeturn9view0
+
+**Художественные требования.** Продолжает обложку, но более воздушный. Пустое место под возможный UI-текст в центре. По левому и правому краю — фрагменты 2–3 лучших сцен.
+
+**Проверка качества.** Хорошо тянется в горизонтальный crop; в центре нет слишком контрастного объекта.
+
+**AI prompt.** `Wide hero image for a cozy casual puzzle game, panoramic warm home mood, layered interior fragments, soft negative space in the center, pastel palette, painterly 2D casual style`
+
+**007. Атлас игрового поля**
+
+**Технические требования.** Холст `2048×2048`. Экспорт `PNG`. Pivot всех слайсов `Center`, у 9-slice рамок — `Center`. PPU `100`. Atlas assignment: `atl_board_main`. Имена слайсов: `spr_board_frame_9s`, `spr_board_fill_9s`, `spr_cell_idle`, `spr_cell_hover`, `spr_cell_selected`, `spr_cell_shadow`, `spr_slot_idle`, `spr_slot_filled`, `spr_slot_warning`, `spr_glow_soft_512`, `spr_glow_match_ring_512`. Для 9-slice спрайтов бордеры: `64 px`. Source padding между объектами не менее `16 px`. Атласный padding в Unity — `4 px`. Бюджет: источник до `2.5 MB`, runtime `~4 MB`.
+
+**Художественные требования.** Материал — кремовый окрашенный пластик или мягкое лакированное дерево, но очень упрощенно. Основные цвета: `#F5EBDD`, `#EADCCB / 234,220,203`, `#D2BCA2 / 210,188,162`, тень `#8B6F61 / 139,111,97` на 18%, теплый свет `#FFF4E7`, glow `#F6C27A`. Толщина внешних контуров `3–4 px`, внутренних линий `2 px`. Граница ячейки должна быть читаемой, но не тяжелой. Запрещено: резьба по дереву, сильная текстура, черные контуры, внутренние шумы.
+
+**Проверка качества.** Ячейка читается на экране как `96 px` и как `128 px`; slot_warning читается без текста; 9-slice панели тянутся без артефактов; на стыках нет bleed; итоговый файл не превышает лимит.
+
+**AI prompt.** `A set of cozy casual UI board elements on transparent background: soft rounded puzzle board frame, warm cream board cells, selected state, hover state, bottom slots, gentle amber glows, clean 2D mobile casual style, no texture noise, consistent lighting from upper left`
+
+**008. Атлас тайлов**
+
+**Технические требования.** Холст `2048×2048`. Экспорт `PNG`. PPU `100`. Atlas assignment: `atl_tiles_main`. Обязательный набор: `spr_tile_base_idle`, `spr_tile_base_selected`, `spr_tile_base_shadow`, далее 6 типов × 3 варианта: `spr_tile_mug_a/b/c`, `spr_tile_book_a/b/c`, `spr_tile_candle_a/b/c`, `spr_tile_teapot_a/b/c`, `spr_tile_plant_a/b/c`, `spr_tile_pillow_a/b/c`. Каждый тайл рисовать как квадратный исходник `256×256`; объект внутри безопасной зоны `196×196`; внешний прозрачный отступ `30 px`. Budget: источник до `2.5 MB`, runtime `~4 MB`.
+
+**Художественные требования.** Стиль — упрощенные cozy-объекты с сильным силуэтом. Палитра самих объектов: кружка — `#F7F3EE`, книга — `#C97B63`, свеча — `#F0D9A8`, чайник — `#A7B9C9`, растение — `#8FAF7B`, подушка — `#D9B4A6`. Общие тени — `#7C6559` на 16–20%. Линия `4 px` на масштабе `256`. Свет всегда сверху-слева, один блик, одна мягкая AO-тень снизу-справа. Варианты А/В/С отличаются только малой ротацией, деталями ручки, корешка, лепестковым рисунком или оттенком в пределах `8–12%`, чтобы тип оставался мгновенно узнаваемым. Запрещено: разные стили между типами, сложные узоры, мелкий текст на книгах, реалистичная фактура ткани.
+
+**Проверка качества.** Каждый тип однозначно различим в `96 px`; три варианта не ломают узнаваемость; объект не утыкается в края; base_selected усиливает выбор, но не спорит с самим объектом. Жесткий лимит: средний source PNG на вариант до `120 KB`, весь атлас до `2.5 MB`.
+
+**AI prompt.** `Generate one cozy casual object sprite on transparent background, centered in a square canvas: [mug/book/candle/teapot/potted plant/pillow], warm pastel palette, thick readable silhouette, soft upper-left light, subtle lower-right shadow, clean mobile game icon style, no realism, no busy texture`
+
+**009. UI-атлас**
+
+**Технические требования.** Холст `2048×2048`. Экспорт `PNG`. PPU `100`. Atlas assignment: `atl_ui_main`. Rotation в Unity выключить. Tight Packing выключить. Draw-mode assets под 9-slice делаются в `Full Rect`. Обязательные слайсы: `ui_btn_primary_9s`, `ui_btn_secondary_9s`, `ui_btn_small_round`, `ui_btn_reward_9s`, `ui_panel_window_9s`, `ui_panel_topbar_9s`, `ui_panel_settings_9s`, `ui_progress_bg_9s`, `ui_progress_fill_9s`, `ui_badge_reward`, `ui_ribbon_unlock`, `ui_popup_complete_9s`, `ui_toggle_on`, `ui_toggle_off`, `ui_slider_thumb`, `ui_checkbox_on`, `ui_checkbox_off`, `ui_divider_soft`. Бюджет: источник до `3 MB`, runtime `~4 MB`.
+
+**Художественные требования.** Кнопки мягкие, скругление большое, радиус 24–36 px в зависимости от размера элемента. Основные цвета: primary `#C97B63`, secondary `#8FAF7B`, neutral panel `#F5EBDD`, line/shadow `#6F594D / 111,89,77`, highlight `#FFF4E7`. Толщина линий `3 px`. Reward-кнопка должна быть заметно «доброй» и теплой, без агрессии, но с явным ad/reward кодом. Запрещено: стеклянные блики, неон, кислотный green, узкие вытянутые кнопки.
+
+**Проверка качества.** Текстовая кнопка остается читаемой при высоте `80–96 px`; 9-slice панели растягиваются без деформации углов; reward-кнопка визуально выделяется, но не доминирует над Play.
+
+**AI prompt.** `A set of cozy casual mobile UI elements on transparent background: rounded buttons, warm cream panels, soft progress bars, reward badge, settings panel, gentle shadows, 2D casual puzzle game style, pastel warm palette, clean edges, no glossy realism`
+
+**010. Иконки действий**
+
+**Технические требования.** Исходно рисовать по одной иконке на `256×256 PNG`, затем паковать в `atl_ui_main`. Pivot `Center`. Safe area `180×180`. Имена: `ico_play`, `ico_back`, `ico_settings`, `ico_reward_star`, `ico_video`, `ico_pause`, `ico_close`, `ico_sound_on`, `ico_sound_off`. Бюджет: каждая исходная иконка до `40 KB`; новые runtime-затраты не добавляются сверх UI-атласа.
+
+**Художественные требования.** Одноцветные или двухцветные иконки. Базовый цвет `#6F594D`, светлый акцент `#FFF4E7`, награда `#F6C27A`. Контур `6 px` во внутреннем масштабе `256`. Запрещено: 3D-иконки, мелкие внутренние прорези, текст внутри иконки.
+
+**Проверка качества.** Иконка узнается в `32 px`; video-иконка и reward-иконка не путаются; back и close отличаются.
+
+**AI prompt.** `Simple cozy mobile UI icon on transparent background, [play/back/settings/reward/video/pause/close/sound], thick clean lines, warm brown line color, soft cream highlight, minimal details, casual puzzle game style`
+
+**011. Срезы для префабов**
+
+**Технические требования.** Новых рисунков не требуется. Это список того, что должно быть нарезано и доступно для сборки префабов: `tile_base_idle`, `tile_base_selected`, `tile_shadow`, `slot_idle`, `slot_filled`, `cell_idle`, `cell_hover`, `cell_selected`, `btn_primary`, `btn_reward`, `panel_window`, `progress_bg`, `progress_fill`. Экспорт новых файлов не нужен; только корректные slices в Sprite Editor.
+
+**Художественные требования.** Ничего не дорисовывать; использовать строго элементы из пунктов `007–010`.
+
+**Проверка качества.** Все slice names совпадают с соглашением; у 9-slice выставлены бордеры; у prefab-баз нет неучтенных полупрозрачных краев.
+
+**AI prompt.** Не требуется.
+
+**012. Фоновая сцена с уютной гостиной**
+
+**Технические требования.** Это набор из трех файлов: `bg01_living_room_back.jpg`, `bg01_living_room_mid.png`, `bg01_living_room_front.png`, каждый `2048×3584`. Pivot у всех `Center`. PPU `100`. Atlas assignment: `scene_local_bg01`. Parallax depth: back `0.05`, mid `0.12`, front `0.22`. Бюджет: back `≤1.2 MB`, mid `≤3 MB`, front `≤3 MB`. Оценка runtime на полный набор — `~17.5 MB` в DXT/ETC2.
+
+**Художественные требования.** Сцена — базовая теплая гостиная без камина и дождя. Палитра: primary `#F5EBDD`, secondary `#D8C2A8`, accent `#F6C27A`, wood `#8A664E`, plant hint `#9CAF88`. Layer breakdown: back — стены, пол, дальнее окно и общий свет; mid — диван, полки, коврик, базовые декоративные пятна; front — ближний столик, край растения, мягкий foreground blur-элемент. Центр кадра под игровым полем — относительно спокойный по деталям. Верхняя зона под HUD свободна. Запрещено: крупный предмет строго в центре, черные окна, сильная текстура ковра.
+
+**Проверка качества.** По бокам остаются «богатые» зоны, которые не закроются полем; в центре нет визуального мусора; слои по отдельности читаются и красиво собираются в параллакс. Жесткий hard cap для набора — `≤7.5 MB` source size.
+
+**AI prompt.** `Vertical layered cozy living room background for a casual puzzle game, painterly 2D style, warm morning light, cream walls, soft wooden floor, gentle shelves and sofa, clear side areas, low-detail center for gameplay board, separate parallax layers, pastel palette, no characters`
+
+**013. Пазл уютной гостиной**
+
+**Технические требования.** Холст `2048×3584`. Экспорт `JPG`. Pivot `Center`. PPU `100`. Atlas assignment: `none`. Имя файла: `pz01_living_room_full.jpg`. Бюджет: `≤1.2 MB`; runtime как RGB `~3.5 MB`. Это не новый арт-сет, а **flatten** из итоговой сцены `012` с небольшим усилением контраста и уютных огоньков.
+
+**Художественные требования.** Пазл повторяет ту же комнату, но чуть красивее: больше теплого света, чуть богаче цвет, легкий акцент на «награде». Никаких новых объектов, которых нет в фоне.
+
+**Проверка качества.** В уменьшении до ширины `380 px` все еще остается приятной картинкой; нет бэндинга на градиентах; нет слишком темных черных.
+
+**AI prompt.** `Flattened cozy living room illustration matching a casual puzzle game background, same composition, slightly richer warm light, polished reward feeling, vertical format, painterly 2D casual style`
+
+**014. Фоновая сцена с лампой и читальным уголком**
+
+**Технические требования.** Файлы: `bg02_reading_corner_back.jpg`, `bg02_reading_corner_mid.png`, `bg02_reading_corner_front.png`, каждый `2048×3584`. Pivot `Center`. Atlas assignment: `scene_local_bg02`. Parallax depth: back `0.05`, mid `0.13`, front `0.24`. Бюджет как у сцены 01.
+
+**Художественные требования.** Ключевой мотив — уютная лампа, кресельная зона, заметный вечерний теплый источник света. Палитра: `#F2E2D2 / 242,226,210`, `#CFA98E / 207,169,142`, `#8A664E`, `#F6C27A`, `#A393C4 / 163,147,196` очень мягко. Layer breakdown: back — стены и общий тон; mid — лампа, кресло-силуэт, тумба, книжная полка; front — край пледа, небольшая ветка растения, мягкая ламповая плашка света. Запрещено: жесткий spot-light, пересвет вокруг лампы, слишком темный угол.
+
+**Проверка качества.** Лампа заметна даже если mid-слой частично перекрыт UI; теплый цвет не уходит в оранжевый кислотный; файл в лимите.
+
+**AI prompt.** `Vertical layered cozy reading corner background, warm lamp glow, armchair nook, evening home atmosphere, soft pastel browns and creams, low-detail center for board gameplay, separate background midground foreground layers, painterly casual 2D`
+
+**015. Пазл читального уголка**
+
+**Технические требования.** Холст `2048×3584`, экспорт `JPG`, файл `pz02_reading_corner_full.jpg`, pivot `Center`, budget `≤1.2 MB`, runtime `~3.5 MB`.
+
+**Художественные требования.** Flatten сцены `014` с немного усиленным свечением лампы и более теплым overall grade.
+
+**Проверка качества.** Лампа выглядит наградой, а не блеклым пятном; композиция по-прежнему читается как комната.
+
+**AI prompt.** `Flattened cozy reading corner illustration for a casual puzzle reward screen, warm lamp glow, soft evening interior, painterly 2D casual game art, vertical`
+
+**016. Фоновая сцена с креслом и пледом**
+
+**Технические требования.** Файлы: `bg03_chair_corner_back.jpg`, `bg03_chair_corner_mid.png`, `bg03_chair_corner_front.png`, каждый `2048×3584`. Atlas assignment: `scene_local_bg03`. Parallax: back `0.05`, mid `0.12`, front `0.25`. Бюджет как ранее.
+
+**Художественные требования.** Сцена концентрируется на большом уютном кресле, мягком пледе, чуть более дневном нейтральном свете. Палитра: `#F5EBDD`, `#D9B4A6`, `#8FAF7B`, `#8A664E`, `#FFF4E7`. Layer breakdown: back — базовая стена и пол; mid — кресло, тумба, книга; front — край пледа, подушка, маленький foreground plant leaf. Запрещено: резкий контраст ткани, мелкий узор клетки, который превратится в шум.
+
+**Проверка качества.** Плед не превращается в грязь в `96 px`; формой кресло не спорит с игрой в центре.
+
+**AI prompt.** `Vertical layered cozy armchair corner background, soft throw blanket, book and side table, warm pastel home palette, painterly casual puzzle game art, clean readable shapes, low-detail center gameplay area`
+
+**017. Пазл кресельного уголка**
+
+**Технические требования.** Холст `2048×3584`, экспорт `JPG`, `pz03_chair_corner_full.jpg`, budget `≤1.2 MB`.
+
+**Художественные требования.** Flatten из `016` с чуть более мягким глобальным светом и аккуратным контрастом на кресле.
+
+**Проверка качества.** Кресло и плед читаются как награда; нет текстурного шума.
+
+**AI prompt.** `Flattened vertical cozy armchair corner illustration, warm pastel home mood, polished reward version of a casual puzzle game background`
+
+**018. Фоновая сцена с камином**
+
+**Технические требования.** Файлы: `bg04_fireplace_back.jpg`, `bg04_fireplace_mid.png`, `bg04_fireplace_front.png`, каждый `2048×3584`. Atlas assignment: `scene_local_bg04`. Parallax: back `0.04`, mid `0.12`, front `0.23`. Бюджет: back `≤1.3 MB`, mid/front по `≤3.2 MB`. Runtime `~17.5 MB`.
+
+**Художественные требования.** Это самая «теплая» сцена. Палитра: `#5A4B44 / 90,75,68`, `#8A664E`, `#CFA98E`, `#F6C27A`, `#FFF4E7`. Layer breakdown: back — стенка и общий вечерний тон; mid — сам камин, полка, свечи, теплое ореольное освещение; front — мягкий foreground glow, небольшой край кресла или декора. В самом арте основной свет уже нарисован, чтобы не зависеть от множества 2D lights в URP. Запрещено: огонь с фототекстурой, ярко-красный диско-эффект.
+
+**Проверка качества.** Камин заметно теплый, но не выжигает экран; mid/front без banding; центр остается относительно спокойным.
+
+**AI prompt.** `Vertical layered cozy fireplace room background, warm evening amber glow, soft wood and stone fireplace, seasonal home atmosphere, painterly 2D casual puzzle game style, low-detail center, prominent warm light`
+
+**019. Пазл каминной комнаты**
+
+**Технические требования.** Холст `2048×3584`, экспорт `JPG`, `pz04_fireplace_full.jpg`, budget `≤1.3 MB`.
+
+**Художественные требования.** Flatten из `018`, можно добавить чуть больше искр света у камина, но без новых объектов.
+
+**Проверка качества.** Камин остается главным героем композиции; картинка не становится слишком темной в миниатюре.
+
+**AI prompt.** `Flattened cozy fireplace room illustration, warm amber glow, polished reward scene for a casual puzzle game, vertical painterly 2D style`
+
+**020. Фоновая сцена с дождливым окном и котом**
+
+**Технические требования.** Файлы: `bg05_rain_cat_back.jpg`, `bg05_rain_cat_mid.png`, `bg05_rain_cat_front.png`, каждый `2048×3584`. Atlas assignment: `scene_local_bg05`. Parallax: back `0.05`, mid `0.14`, front `0.26`. Бюджет как у предыдущих сцен.
+
+**Художественные требования.** Сцена холоднее снаружи и теплее внутри. Палитра: exterior `#44546A / 68,84,106`, soft blue `#91A8C7 / 145,168,199`, interior warm `#F6C27A`, cream `#F5EBDD`, wood `#8A664E`. Layer breakdown: back — окно, ночной фон, общий тон комнаты; mid — подоконник, штора, интерьерная мебель, место для кота; front — мягкие свечения и оконная глубина. Дождь как крупный FX не рисовать внутрь back-слоя, он будет отдельным пропом. Запрещено: яркий cyan, контрастный thunderstorm, мрачность.
+
+**Проверка качества.** Сцена уютная, а не депрессивная; контраст между теплым интерьером и холодным окном приятный; композиция не перегружена.
+
+**AI prompt.** `Vertical layered cozy rainy window room background, warm interior and cool night-blue window outside, painterly 2D casual puzzle game art, soft curtains, home comfort, low-detail center for gameplay board, no realism`
+
+**021. Пазл дождливого окна и кота**
+
+**Технические требования.** Холст `2048×3584`, экспорт `JPG`, `pz05_rain_cat_full.jpg`, budget `≤1.3 MB`.
+
+**Художественные требования.** Flatten финальной сцены `020` с котом уже на месте и более цельным колористическим балансом. Это финальный самый эмоциональный пазл MVP.
+
+**Проверка качества.** Кот читается как акцент, но не слишком маленький; окно не забирает все внимание себе.
+
+**AI prompt.** `Flattened cozy rainy window interior with cat, warm home atmosphere, cool exterior rain, polished reward illustration for a casual puzzle game, vertical painterly 2D`
+
+**022. Атлас масок и рамок пазлов**
+
+**Технические требования.** Холст `2048×2048`. Экспорт `PNG`. Atlas assignment: `atl_puzzle_overlay`. Содержимое: `pzl_mask_01`…`pzl_mask_05`, `pzl_border_01`…`pzl_border_05`, `pzl_slot_locked_01`…`05`, `pzl_slot_glint`. Каждая маска — отдельный shape-спрайт на прозрачном фоне, плюс соответствующая рамка. Pivot `Center`. Budget: `≤1.5 MB`, runtime `~4 MB`, но фактически использовать этот атлас только на puzzle screen.
+
+**Художественные требования.** Форма пяти крупных фрагментов, собирающих вертикальную картинку. Рваность умеренная, без супер-мелких зубцов. Рамка кремовая с тонким теплым контуром `#8A664E`, light edge `#FFF4E7`, тень `#8B6F61` 14%. Locked-slot может иметь мягкую тканевую бумагу или matte cardboard feel. Запрещено: слишком тонкие куски, микрозубцы, сложные irregular outlines.
+
+**Проверка качества.** Маски хорошо стыкуются; locked-слот читается как «еще не открыто»; border не съедает картинку. Важно: для MVP лучше использовать эти маски **только в отдельной puzzle scene**, а не злоупотреблять Sprite Mask в core gameplay, потому что Unity предупреждает: Sprite Mask несовместим с SRP Batcher и переводит рендеринг в dynamic batching. citeturn15view0
+
+**AI prompt.** `A set of five large cozy puzzle piece masks and matching soft borders on transparent background, rounded interlocking shapes, readable silhouettes, gentle warm cream and brown outline style, casual mobile game UI`
+
+**023. Проп с лампой**
+
+**Технические требования.** Холст `512×1024`. Экспорт `PNG`. Pivot `Bottom Center`. PPU `100`. Atlas assignment: `none` либо `props_scene_shared` при желании локального пакования позже. Имя: `prop_lamp_floor.png`. Budget: `≤180 KB`; runtime `~0.5 MB`.
+
+**Художественные требования.** Мягкая напольная лампа с тканевым абажуром. Цвета: `#E9D9BA / 233,217,186`, `#8A664E`, glow hint `#F6C27A`. Линия `4 px`. Мягкий теплый свет уже частично нарисован в sprite. Запрещено: хром, реалистичные складки ткани, холодный свет.
+
+**Проверка качества.** Читается в высоте `160 px`; опора лампы не слишком тонкая; контур чистый.
+
+**AI prompt.** `Cozy standing floor lamp sprite, warm fabric lampshade, wooden base, soft upper-left light, transparent background, casual 2D puzzle game style, readable silhouette`
+
+**024. Проп с креслом**
+
+**Технические требования.** Холст `1024×1024`. Экспорт `PNG`. Pivot `Bottom Center`. Имя: `prop_armchair_cozy.png`. Budget: `≤300 KB`; runtime `~1 MB`.
+
+**Художественные требования.** Уютное кресло с округлыми подлокотниками. Цвет корпуса `#CFA98E`, подушка `#D9B4A6`, тень `#7C6559`. Линия `4 px`. Без узорчатой ткани.
+
+**Проверка качества.** Узнается в `180 px`; пропорции устойчивые; ножки не слишком хрупкие.
+
+**AI prompt.** `Cozy rounded armchair sprite, soft pastel upholstery, warm home palette, transparent background, painterly casual mobile game style, readable silhouette`
+
+**025. Проп с камином**
+
+**Технические требования.** Холст `1024×1024`. Экспорт `PNG`. Pivot `Bottom Center`. Имя: `prop_fireplace_main.png`. Budget: `≤350 KB`; runtime `~1 MB`.
+
+**Художественные требования.** Упрощенный камин с теплым внутренним свечением. Основные цвета: `#8A664E`, `#D8C2A8`, `#F6C27A`, `#FFF4E7`. Не фотокамин, а stylized casual prop.
+
+**Проверка качества.** Даже без анимации выглядит теплым; внутренний огонь не слипается в белое пятно.
+
+**AI prompt.** `Stylized cozy fireplace sprite with warm glowing interior, pastel wood and stone tones, transparent background, casual 2D puzzle game style, no realism`
+
+**026. Проп с котом**
+
+**Технические требования.** Холст `512×512`. Экспорт `PNG`. Pivot `Bottom Center`. Имя: `prop_cat_sit.png`. Дополнительно, если захочешь анимировать хвост, отдельный слой `prop_cat_tail.png`. Budget: `≤140 KB`; runtime `~0.25 MB`.
+
+**Художественные требования.** Сидящий кот, максимально читаемый силуэт, дружелюбный. Базовый цвет `#C7A27E / 199,162,126`, тень `#8A664E`, свет `#FFF4E7`. Глаза — не зрачки-микродетали, а 1–2 простых штриха. Запрещено: реалистичная шерсть, слишком маленькая голова, анатомическая детализация.
+
+**Проверка качества.** Узнается в `72 px`; силуэт остается ясным; при выключении мелких деталей все еще «кот».
+
+**AI prompt.** `Cute sitting cat sprite for a cozy casual puzzle game, simple readable silhouette, warm brown-orange pastel fur, friendly expression, transparent background, non-realistic cute style`
+
+**027. Проп с растением**
+
+**Технические требования.** Холст `512×768`. Экспорт `PNG`. Pivot `Bottom Center`. Имя: `prop_plant_pot.png`. Budget: `≤160 KB`; runtime `~0.38 MB`.
+
+**Художественные требования.** Горшок + простые крупные листья. Цвета: листья `#8FAF7B`, горшок `#C97B63` или `#D8C2A8`, тень `#6F594D`. Без мелкой листвы и без тонких веточек.
+
+**Проверка качества.** Не превращается в зеленую «грязь» в уменьшении; листья различимы крупными пятнами.
+
+**AI prompt.** `Cozy potted plant sprite with large readable leaves, pastel green foliage, warm ceramic pot, transparent background, simple casual game style`
+
+**028. Проп дождя на окне**
+
+**Технические требования.** Холст `1024×1792`. Экспорт `PNG`. Pivot `Center`. Имя: `prop_window_rain_overlay.png`. Budget: `≤220 KB`; runtime `~1.75 MB`, но использовать только в сцене 05.
+
+**Художественные требования.** Это не полноценный кадр дождя, а semi-transparent overlay для конкретной зоны окна: крупные мягкие дождевые дорожки, редкие капли, очень ненавязчиво. Основные цвета: `#B9C8D8 / 185,200,216` и `#FFFFFF` с непрозрачностью около `20–35%`. Запрещено: частая сетка капель, шум, снегоподобные точки.
+
+**Проверка качества.** На темном окне эффект читается, но не перекрывает интерьер; не превращается в грязные вертикальные полосы.
+
+**AI prompt.** `Transparent rain-on-window overlay for a cozy home scene, soft vertical droplets and streaks, subtle cool blue-white tones, readable but gentle, no noise, no dense rain`
+
+**029. Ambient overlay с виньеткой**
+
+**Технические требования.** Холст `1024×1792`. Экспорт `PNG`. Pivot `Center`. Имя: `ovl_vignette_soft.png`. Budget `≤120 KB`; runtime `~1.75 MB` если как RGBA, но можно держать как очень легкий grayscale alpha.
+
+**Художественные требования.** Очень мягкая теплая виньетка, затемнение по углам не сильнее `12–15%`. Цвет лучше теплый коричнево-кремовый, а не черный. Запрещено: тяжелая киношная виньетка.
+
+**Проверка качества.** На белом/кремовом UI не появляется грязный серый круг; по углам только мягкое смягчение фокуса.
+
+**AI prompt.** `Soft warm vignette overlay for a cozy casual game, transparent center, very subtle warm brown edge darkening, clean smooth gradient, no harsh corners`
+
+**030. Атлас light/bloom masks**
+
+**Технические требования.** Холст `1024×1024`. Экспорт `PNG`. Atlas assignment: `atl_ambient_masks`. Содержимое: `ovl_glow_lamp`, `ovl_glow_fireplace`, `ovl_glow_window`, `ovl_glow_general_soft`. Pivot `Center`. Budget `≤180 KB`; runtime `~1 MB`.
+
+**Художественные требования.** Белые или кремовые мягкие пятна свечения на прозрачном фоне. Они нужны как art-driven glow maps, чтобы не раздувать real-time lighting. Запрещено: жесткие radial bursts, lens flare.
+
+**Проверка качества.** Glow выглядит естественно при additive/screen наложении слабой интенсивности; нет резких краев.
+
+**AI prompt.** `Set of soft glow masks on transparent background: lamp glow, fireplace glow, window glow, generic soft bloom, creamy white warm gradients, no lens flare, casual 2D game use`
+
+## Фоны, пазлы, типографика и звук
+
+**031. Спрайт-лист дыма**
+
+**Технические требования.** Sprite sheet `480×60`, кадр `60×60`, `8` кадров, `12 fps`. Экспорт `PNG`. Atlas assignment: `atl_vfx_main`. Имя: `fx_smoke_sheet_8x60.png`. Budget `≤80 KB`; runtime `~0.03 MB`.
+
+**Художественные требования.** Мягкие дымовые клубы для кружки или камина, почти монохромные: `#FFF4E7`, `#EADCCB`, прозрачность падает к концу. Без жестких линий.
+
+**Проверка качества.** Анимация плавная; первый и последний кадр не дергаются; на темном и светлом фоне дым не выглядит грязно.
+
+**AI prompt.** `Small soft smoke sprite sheet, 8 frames, warm cream smoke puffs, transparent background, subtle cozy VFX for a casual game, no hard edges`
+
+**032. Спрайт-лист листьев**
+
+**Технические требования.** Sprite sheet `640×80`, кадр `80×80`, `8` кадров, `12 fps`. Экспорт `PNG`. Atlas assignment: `atl_vfx_main`. Имя: `fx_leaves_sheet_8x80.png`. Budget `≤100 KB`; runtime `~0.05 MB`.
+
+**Художественные требования.** 2–3 вида крупных осенних листьев, цвета `#C97B63`, `#D6A05F / 214,160,95`, `#8FAF7B`. Повороты и легкая деформация от кадра к кадру. Не делать детализированные жилки.
+
+**Проверка качества.** На фронтальном движении листья читаются; не превращаются в цветной шум.
+
+**AI prompt.** `Autumn leaf VFX sprite sheet, 8 frames, large readable pastel leaves, warm terracotta honey and sage tones, transparent background, cozy casual game style`
+
+**033. Спрайт-лист снега**
+
+**Технические требования.** Sprite sheet `512×64`, кадр `64×64`, `8` кадров, `10 fps`. Экспорт `PNG`. Atlas assignment: `atl_vfx_main`. Имя: `fx_snow_sheet_8x64.png`. Budget `≤70 KB`; runtime `~0.03 MB`.
+
+**Художественные требования.** Очень простые мягкие снежинки и точки, без ледяных кристаллов. Цвет `#FFFFFF` и `#DDE9F5 / 221,233,245`.
+
+**Проверка качества.** Не путается с дождем и пылью; не мерцает.
+
+**AI prompt.** `Soft snow VFX sprite sheet, 8 frames, simple white and pale blue flakes, transparent background, cozy casual 2D game style`
+
+**034. Спрайт-лист искр**
+
+**Технические требования.** Sprite sheet `512×64`, кадр `64×64`, `8` кадров, `15 fps`. Экспорт `PNG`. Atlas assignment: `atl_vfx_main`. Имя: `fx_spark_sheet_8x64.png`. Budget `≤70 KB`; runtime `~0.03 MB`.
+
+**Художественные требования.** Маленькая теплая звездочка и искра для reward/puzzle reveal. Цвета `#F6C27A`, `#FFF4E7`, чуть-чуть `#E8A6A1`.
+
+**Проверка качества.** Искра остается видимой поверх светлого фона, но не выглядит агрессивно.
+
+**AI prompt.** `Tiny warm sparkle VFX sprite sheet, 8 frames, amber and cream star burst, transparent background, soft casual reward effect`
+
+**035. Спрайт-лист конфетти**
+
+**Технические требования.** Sprite sheet `768×64`, кадр `64×64`, `12` кадров, `15 fps`. Экспорт `PNG`. Atlas assignment: `atl_vfx_main`. Имя: `fx_confetti_sheet_12x64.png`. Budget `≤120 KB`; runtime `~0.05 MB`.
+
+**Художественные требования.** Крупные бумажные полоски и кружки, 4–5 цветов из основной палитры: `#C97B63`, `#F6C27A`, `#9CAF88`, `#91A8C7`, `#FFF4E7`. Никакого неона.
+
+**Проверка качества.** Хорошо читается в Win-popup; не шумит на темном фоне.
+
+**AI prompt.** `Confetti celebration sprite sheet, 12 frames, warm pastel paper pieces, cozy casual game palette, transparent background, joyful but soft`
+
+**036. Типографика и font spec**
+
+**Технические требования.** Это не рисуемый ассет, а фиксируемая спецификация. Для игры нужен один основной font family с полной кириллицей и латиницей, весами `600` и `700`; импорт в TextMeshPro как SDF font asset. Unity указывает, что TextCore / TextMesh Pro на SDF хорошо держит четкость на разных размерах и при масштабировании, поэтому для Web/UI это правильный базовый выбор. Рекомендованные размеры интерфейса: title `72`, menu button `42`, HUD `30`, secondary `24`, helper `20`. Цвет основного текста `#6F594D`, светлый текст на кнопках `#FFF9F2 / 255,249,242`. Outline только для светлого текста на яркой кнопке, не более `0.12`. citeturn10view0
+
+**Художественные требования.** Шрифт округлый, friendly, не конденсированный, без резких засечек. Допустима легкая hand-crafted теплота, но не «детская» комичность.
+
+**Проверка качества.** Кириллица чистая; цифры и проценты хорошо читаются; буквы `я`, `ж`, `ф`, `щ` не разваливаются на малом размере.
+
+**AI prompt.** Не требуется.
+
+**037. SFX-маркеры и тайминг анимаций**
+
+**Технические требования.** Это production checklist для звуков, не рисуемый ассет. Имена событий: `sfx_ui_click`, `sfx_tile_pick`, `sfx_tile_slot_land`, `sfx_tile_match`, `sfx_slot_warning`, `sfx_level_complete`, `sfx_puzzle_piece_reveal`, `sfx_puzzle_complete`, `sfx_background_unlock`, `sfx_reward_offer`, `sfx_reward_confirm`, `sfx_settings_open`, `sfx_settings_close`, `amb_room_soft`, `amb_fireplace_loop`, `amb_rain_loop`, `sfx_cat_meow_soft`. Тайминг: click `t0`; tile pick `t0`; slot land `t+0.06–0.09s`; match sparkle `t+0.10–0.14s`; level complete swish `t0`; puzzle piece reveal sparkle `t+0.12s`; background unlock whoosh `t0`; reward confirm `t+0.08s`. Если есть rewarded ad UI, текст и иконография должны явно объяснять, что это реклама и что за приз; во время fullscreen ads звук и геймплей паузятся. citeturn8view6turn9view2
+
+**Художественные требования.** SFX должны быть мягкими и «домашними»: дерево, бумага, мягкий клик, теплый shimmer. Никаких аркадных лазеров.
+
+**Проверка качества.** Ни один SFX не режет слух; HUD и reward-звуки различимы; ambiences не конфликтуют друг с другом.
+
+**AI prompt.** Не требуется.
+
+**038. Финальный экспортный чек-лист**
+
+**Технические требования.** Перед передачей в Unity каждый ассет проходит один и тот же чек. Файлы и папки — только ASCII snake_case, без пробелов и кириллицы. Source мастера: `PNG/PSD/JPG`. UI и тайлы: `Sprite (2D and UI)`, mipmaps off, read/write off, sRGB on. UI 9-slice — `Full Rect`. Общие Sprite Atlas — раздельно по одновременно используемым группам. Для Web релиза включить Data Caching; на сборке использовать релизную компрессию, предпочтительно Brotli, если хостинг корректно обслуживает заголовки. Если серверная конфигурация недоступна, допускается Decompression Fallback, но Unity предупреждает, что это увеличивает loader и менее эффективно загружает проект. Yandex-архив: один ZIP, `index.html` в корне, содержимое в распакованном виде не более `100 MB`. Скриншоты для каталога: реальный геймплей, не менее 70% изображения. citeturn8view3turn8view4turn8view1turn11view1turn13view1turn8view9turn9view0turn9view2
+
+**Художественные требования.** Все ассеты должны выглядеть как один мир: один источник света, одна толщина линий, один язык форм, одна температура палитры. Если новый ассет выбивается, значит он не готов даже при технической корректности.
+
+**Проверка качества.** Проверка в `96 px` для тайлов; проверка на светлом и темном фоне для VFX; проверка в интеграции с UI; проверка PNG-краев на ореолы; проверка итогового source-size набора против бюджета публикации.
+
+**AI prompt.** Не требуется.
+
+## Итоговый экспортный манифест
+
+Ниже — компактный манифест файлов, который можно использовать как контрольную таблицу. Оценка памяти — это **приближенный GPU runtime budget**, рассчитанный по типичным форматам Unity для Web: RGB `4 bpp` и RGBA `8 bpp` для DXT/ETC2, а для mobile ASTC 6×6 будет заметно меньше. Это не размер PNG/JPG на диске, а ориентир по памяти после загрузки текстур. citeturn10view3turn10view4turn12view0
+
+| Ассет | Filename | Размер | Формат | Atlas | Оценка памяти |
+|---|---|---:|---|---|---:|
+| Логотип | `logo_tile_puzzle_home_main.png` | 2048×1024 | PNG | none | ~2.0 MB |
+| Splash background | `splash_bg_cozy_room.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Splash logo overlay | `splash_logo_overlay.png` | 2048×1024 | PNG | none | ~2.0 MB |
+| Store icon | `store_icon_512.png` | 512×512 | PNG | none | n/a build-only |
+| Maskable icon | `store_icon_maskable_512.png` | 512×512 | PNG | none | n/a build-only |
+| Store cover | `store_cover_800x470.png` | 800×470 | PNG | none | n/a build-only |
+| Hero image | `store_hero_1560x520.jpg` | 1560×520 | JPG | none | n/a build-only |
+| Атлас поля | `atl_board_main.png` | 2048×2048 | PNG | `atl_board_main` | ~4.0 MB |
+| Атлас тайлов | `atl_tiles_main.png` | 2048×2048 | PNG | `atl_tiles_main` | ~4.0 MB |
+| UI-атлас | `atl_ui_main.png` | 2048×2048 | PNG | `atl_ui_main` | ~4.0 MB |
+| Срезы префабов | derived from atlases | — | — | derived | 0 MB |
+| Сцена 01 | `bg01_living_room_back.jpg`, `bg01_living_room_mid.png`, `bg01_living_room_front.png` | 3×2048×3584 | JPG+PNG+PNG | scene-local | ~17.5 MB |
+| Пазл 01 | `pz01_living_room_full.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Сцена 02 | `bg02_reading_corner_back.jpg`, `bg02_reading_corner_mid.png`, `bg02_reading_corner_front.png` | 3×2048×3584 | JPG+PNG+PNG | scene-local | ~17.5 MB |
+| Пазл 02 | `pz02_reading_corner_full.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Сцена 03 | `bg03_chair_corner_back.jpg`, `bg03_chair_corner_mid.png`, `bg03_chair_corner_front.png` | 3×2048×3584 | JPG+PNG+PNG | scene-local | ~17.5 MB |
+| Пазл 03 | `pz03_chair_corner_full.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Сцена 04 | `bg04_fireplace_back.jpg`, `bg04_fireplace_mid.png`, `bg04_fireplace_front.png` | 3×2048×3584 | JPG+PNG+PNG | scene-local | ~17.5 MB |
+| Пазл 04 | `pz04_fireplace_full.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Сцена 05 | `bg05_rain_cat_back.jpg`, `bg05_rain_cat_mid.png`, `bg05_rain_cat_front.png` | 3×2048×3584 | JPG+PNG+PNG | scene-local | ~17.5 MB |
+| Пазл 05 | `pz05_rain_cat_full.jpg` | 2048×3584 | JPG | none | ~3.5 MB |
+| Атлас масок пазлов | `atl_puzzle_overlay.png` | 2048×2048 | PNG | `atl_puzzle_overlay` | ~4.0 MB |
+| Лампа | `prop_lamp_floor.png` | 512×1024 | PNG | none | ~0.5 MB |
+| Кресло | `prop_armchair_cozy.png` | 1024×1024 | PNG | none | ~1.0 MB |
+| Камин | `prop_fireplace_main.png` | 1024×1024 | PNG | none | ~1.0 MB |
+| Кот | `prop_cat_sit.png` | 512×512 | PNG | none | ~0.25 MB |
+| Растение | `prop_plant_pot.png` | 512×768 | PNG | none | ~0.38 MB |
+| Rain overlay | `prop_window_rain_overlay.png` | 1024×1792 | PNG | none | ~1.75 MB |
+| Vignette overlay | `ovl_vignette_soft.png` | 1024×1792 | PNG | none | ~1.75 MB |
+| Bloom masks atlas | `atl_ambient_masks.png` | 1024×1024 | PNG | `atl_ambient_masks` | ~1.0 MB |
+| Smoke VFX | `fx_smoke_sheet_8x60.png` | 480×60 | PNG | `atl_vfx_main` | ~0.03 MB |
+| Leaves VFX | `fx_leaves_sheet_8x80.png` | 640×80 | PNG | `atl_vfx_main` | ~0.05 MB |
+| Snow VFX | `fx_snow_sheet_8x64.png` | 512×64 | PNG | `atl_vfx_main` | ~0.03 MB |
+| Spark VFX | `fx_spark_sheet_8x64.png` | 512×64 | PNG | `atl_vfx_main` | ~0.03 MB |
+| Confetti VFX | `fx_confetti_sheet_12x64.png` | 768×64 | PNG | `atl_vfx_main` | ~0.05 MB |
+| Font spec | TMP SDF asset from chosen family | — | asset | none | negligible |
+| SFX markers | production spec only | — | doc | none | n/a |
+| Export checklist | production spec only | — | doc | none | n/a |
+
+В практическом рантайме тебе не нужно держать в памяти все сцены и все пазлы сразу. При правильной загрузке/выгрузке сцен и спрайтов общий постоянно загруженный художественный пакет MVP можно удерживать примерно в диапазоне **~21 МБ shared art** для board/tile/UI/props/overlays/VFX плюс **~17.5 МБ на одну активную фоновую сцену**, а puzzle-экрану при необходимости добавлять только один текущий `2048×3584` пазл и атлас масок. Такой бюджет реалистичен для аккуратного WebGL MVP, если не раздувать атласы, не включать Read/Write без нужды, не плодить mipmaps и не грузить сразу все scene-local текстуры. citeturn13view0turn8view4turn8view3turn8view1
