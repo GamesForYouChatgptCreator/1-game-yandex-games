@@ -1,0 +1,1603 @@
+CODEX MASTER SPECIFICATION
+Проект: Tile Puzzle Home
+Версия документа: 1.0
+Назначение: единственный технический источник истины для Codex.
+Движок: Unity 6000.3.20f1
+Рендер: Universal Render Pipeline, 2D Renderer
+Платформа: WebGL / Yandex Games
+Язык кода: C#
+Целевая ориентация: Portrait
+Базовое разрешение интерфейса: 1080×1920
+Репозиторий: https://github.com/GamesForYouChatgptCreator/1-game-yandex-games
+
+================================================================================
+0. РОЛЬ CODEX
+================================================================================
+
+Codex отвечает за:
+1. Создание и изменение структуры Unity-проекта.
+2. Создание папок.
+3. Создание C#-скриптов.
+4. Создание Editor-скриптов.
+5. Создание сцен.
+6. Создание и настройку объектов сцен.
+7. Создание Prefab.
+8. Создание ScriptableObject-классов и экземпляров данных.
+9. Создание Sprite Atlas.
+10. Настройку Project Settings через Editor API, где это возможно.
+11. Перемещение импортированных художником ассетов в правильные папки.
+12. Автоматическую настройку TextureImporter.
+13. Проверку отсутствующих ссылок.
+14. Создание тестовой сцены для визуальной проверки графики.
+15. Поддержание проекта в собираемом состоянии после каждой задачи.
+
+Codex не отвечает за:
+1. Создание финальной графики.
+2. Изменение художественного стиля.
+3. Самовольное добавление механик.
+4. Самовольную смену архитектуры.
+5. Добавление сторонних пакетов без отдельного разрешения.
+6. Изменение количества уровней, пазлов или фонов.
+7. Усложнение MVP ради будущего масштабирования.
+
+Главное правило:
+После каждого завершённого задания проект должен компилироваться без ошибок.
+
+================================================================================
+1. ПРАВИЛА РАБОТЫ С ФАЙЛАМИ
+================================================================================
+
+Codex имеет право:
+- создавать новые папки;
+- создавать новые файлы;
+- перемещать файлы;
+- переименовывать файлы;
+- удалять только созданные им временные файлы;
+- создавать .meta-файлы через Unity;
+- создавать Editor tooling для автоматизации.
+
+Codex не должен вручную генерировать .meta-файлы текстом, если Unity может создать их сама.
+
+Перед перемещением существующего ассета:
+1. Проверить все ссылки через AssetDatabase.
+2. Использовать AssetDatabase.MoveAsset.
+3. Не использовать файловую систему напрямую для ассетов внутри Assets.
+4. Проверить результат AssetDatabase.Refresh.
+5. Не терять GUID.
+
+Любое массовое действие выполняется через Editor-скрипт:
+Assets/Editor/ProjectSetup/
+или
+Assets/Editor/ImportTools/
+
+================================================================================
+2. КОРНЕВАЯ СТРУКТУРА РЕПОЗИТОРИЯ
+================================================================================
+
+/
+├── Assets/
+├── Packages/
+├── ProjectSettings/
+├── UserSettings/                  не коммитить
+├── Documentation/
+│   ├── Art/
+│   ├── Design/
+│   ├── Technical/
+│   └── QA/
+├── README.md
+├── .gitignore
+└── LICENSE                        опционально
+
+В корне Unity-проекта не создавать:
+- Temp
+- Library
+- Logs
+- Obj
+- Builds
+- Build
+- MemoryCaptures
+
+Они должны быть исключены через .gitignore.
+
+================================================================================
+3. СТРУКТУРА ASSETS
+================================================================================
+
+Assets/
+├── _Project/
+│   ├── Art/
+│   │   ├── Backgrounds/
+│   │   │   ├── Gameplay/
+│   │   │   ├── Menu/
+│   │   │   ├── Puzzle/
+│   │   │   └── Promo/
+│   │   ├── Tiles/
+│   │   │   ├── Bases/
+│   │   │   ├── Icons/
+│   │   │   └── Effects/
+│   │   ├── UI/
+│   │   │   ├── Buttons/
+│   │   │   ├── Panels/
+│   │   │   ├── Icons/
+│   │   │   ├── Progress/
+│   │   │   ├── Tutorial/
+│   │   │   └── Modal/
+│   │   ├── Puzzle/
+│   │   │   ├── Images/
+│   │   │   ├── Pieces/
+│   │   │   └── Frames/
+│   │   ├── VFX/
+│   │   │   ├── Atlases/
+│   │   │   ├── Single/
+│   │   │   └── Materials/
+│   │   ├── Fonts/
+│   │   ├── Textures/
+│   │   └── SpriteAtlases/
+│   ├── Audio/
+│   │   ├── Music/
+│   │   ├── SFX/
+│   │   └── Mixers/
+│   ├── Data/
+│   │   ├── Config/
+│   │   ├── Levels/
+│   │   ├── Tiles/
+│   │   ├── Puzzles/
+│   │   ├── Backgrounds/
+│   │   └── Localization/
+│   ├── Prefabs/
+│   │   ├── Core/
+│   │   ├── Gameplay/
+│   │   ├── Tiles/
+│   │   ├── Puzzle/
+│   │   ├── UI/
+│   │   ├── VFX/
+│   │   └── Debug/
+│   ├── Scenes/
+│   │   ├── Bootstrap.unity
+│   │   ├── MainMenu.unity
+│   │   ├── Gameplay.unity
+│   │   ├── PuzzleRoom.unity
+│   │   ├── Collection.unity
+│   │   └── ArtValidation.unity
+│   ├── Scripts/
+│   │   ├── Runtime/
+│   │   │   ├── Core/
+│   │   │   ├── Bootstrap/
+│   │   │   ├── Services/
+│   │   │   ├── Save/
+│   │   │   ├── SceneManagement/
+│   │   │   ├── Gameplay/
+│   │   │   ├── Tiles/
+│   │   │   ├── Board/
+│   │   │   ├── Tray/
+│   │   │   ├── Puzzle/
+│   │   │   ├── Backgrounds/
+│   │   │   ├── UI/
+│   │   │   ├── Audio/
+│   │   │   ├── Ads/
+│   │   │   ├── Analytics/
+│   │   │   └── Utilities/
+│   │   └── Editor/
+│   │       ├── ProjectSetup/
+│   │       ├── ImportTools/
+│   │       ├── SceneTools/
+│   │       ├── DataTools/
+│   │       └── Validation/
+│   ├── Settings/
+│   │   ├── URP/
+│   │   ├── Input/
+│   │   └── Rendering/
+│   └── Tests/
+│       ├── EditMode/
+│       └── PlayMode/
+└── ThirdParty/
+    └── только явно разрешённые внешние пакеты
+
+Все собственные файлы проекта должны находиться внутри Assets/_Project.
+
+================================================================================
+4. ASSEMBLY DEFINITIONS
+================================================================================
+
+Создать:
+
+Assets/_Project/Scripts/Runtime/TilePuzzleHome.Runtime.asmdef
+Assets/_Project/Scripts/Editor/TilePuzzleHome.Editor.asmdef
+Assets/_Project/Tests/EditMode/TilePuzzleHome.Tests.EditMode.asmdef
+Assets/_Project/Tests/PlayMode/TilePuzzleHome.Tests.PlayMode.asmdef
+
+TilePuzzleHome.Runtime:
+- autoReferenced: true
+- allowUnsafeCode: false
+- overrideReferences: false
+- noEngineReferences: false
+
+TilePuzzleHome.Editor:
+- includePlatforms: Editor
+- reference TilePuzzleHome.Runtime
+
+Tests:
+- references Runtime
+- optional Unity Test Framework
+- не добавлять сложные тестовые зависимости
+
+Namespace всего runtime-кода:
+TilePuzzleHome
+
+Namespace editor-кода:
+TilePuzzleHome.Editor
+
+================================================================================
+5. BUILD SETTINGS И СЦЕНЫ
+================================================================================
+
+Порядок сцен в Build Settings:
+
+0 Bootstrap
+1 MainMenu
+2 Gameplay
+3 PuzzleRoom
+4 Collection
+
+ArtValidation не включать в релизный Build Settings.
+
+Bootstrap загружается первой всегда.
+
+Переходы:
+Bootstrap -> MainMenu
+MainMenu -> Gameplay
+Gameplay -> PuzzleRoom после выдачи детали пазла
+PuzzleRoom -> MainMenu или Gameplay
+MainMenu -> Collection
+Collection -> MainMenu
+
+Сцены не должны напрямую обращаться друг к другу через FindObjectOfType.
+
+================================================================================
+6. PROJECT SETTINGS
+================================================================================
+
+Player Settings:
+Company Name: GamesForYou
+Product Name: Tile Puzzle Home
+Default Orientation: Portrait
+Auto Rotation: Off
+Color Space: Linear, если WebGL-билд стабилен; иначе Gamma только после отдельного решения.
+Active Input Handling: Input System Package или Both; для MVP допустим Both.
+Run In Background: Off
+Resizable Window: On
+WebGL Template: Default до интеграции Yandex SDK
+Compression Format: Brotli для релизного билда при корректной настройке сервера; Development — Disabled или Gzip
+Data Caching: On
+Decompression Fallback: On только если требуется платформой
+Memory Size: минимально достаточный, начать с 256 MB
+Exception Support: Explicitly Thrown Exceptions Only для release
+Managed Stripping Level: Medium
+Strip Engine Code: On после проверки
+WebGL 2.0: On
+WebGL 1.0: Off
+Threads: Off для максимальной совместимости MVP
+WASM SIMD: On только после проверки Yandex Games
+Target Frame Rate: 60
+VSync Count: 0
+
+Quality:
+Создать один основной профиль WebGL.
+Pixel Light Count: 0
+Shadows: Disable
+Anti Aliasing: Disabled или 2x только после профилирования
+Soft Particles: Off
+Realtime Reflection Probes: Off
+Texture Streaming: Off
+Anisotropic Textures: Per Texture
+
+Time:
+Fixed Timestep: 0.02
+Maximum Allowed Timestep: 0.1
+
+Physics 2D:
+Gravity: 0, -9.81, но gameplay плиток не должен зависеть от физики.
+Auto Sync Transforms: Off.
+Queries Hit Triggers: On только если нужно.
+Большинство плиток управлять без Rigidbody2D.
+
+================================================================================
+7. URP 2D
+================================================================================
+
+Создать:
+Assets/_Project/Settings/URP/TilePuzzleHome_URPAsset.asset
+Assets/_Project/Settings/URP/TilePuzzleHome_2DRenderer.asset
+
+Renderer Type:
+2D Renderer
+
+HDR:
+Off
+
+MSAA:
+Disabled
+
+Render Scale:
+1.0
+
+Depth Texture:
+Off
+
+Opaque Texture:
+Off
+
+SRP Batcher:
+On
+
+Dynamic Batching:
+On, если доступно
+
+Post Processing:
+Off по умолчанию.
+Bloom не использовать для MVP; свечение реализовать спрайтами.
+
+2D Lights:
+Использовать минимально.
+Фоны должны выглядеть корректно без realtime lights.
+Все основные световые эффекты рисуются в ассетах или отдельными спрайтами.
+
+Camera:
+Orthographic
+Clear Flags / Background: Solid Color
+Background Color: #F5DFC3
+Allow HDR: Off
+Allow MSAA: Off
+Post Processing: Off
+Occlusion Culling: Off
+
+================================================================================
+8. CANVAS И АДАПТИВНЫЙ UI
+================================================================================
+
+Все сцены с UI должны использовать:
+
+Canvas
+- Render Mode: Screen Space - Overlay
+- Pixel Perfect: Off
+- Sorting Order: по назначению
+
+CanvasScaler
+- UI Scale Mode: Scale With Screen Size
+- Reference Resolution: 1080×1920
+- Screen Match Mode: Match Width Or Height
+- Match: 0.5
+
+GraphicRaycaster
+- Ignore Reversed Graphics: On
+
+Safe Area:
+Создать компонент SafeAreaFitter.
+Он должен:
+- читать Screen.safeArea;
+- обновляться при смене разрешения;
+- применять offsetMin/offsetMax к SafeAreaRoot;
+- не изменять фон;
+- не масштабировать Canvas целиком.
+
+Структура каждого Canvas:
+Canvas
+└── FullscreenRoot
+    ├── BackgroundRoot
+    ├── SafeAreaRoot
+    ├── OverlayRoot
+    ├── ModalRoot
+    ├── TutorialRoot
+    └── DebugRoot
+
+Sorting:
+BackgroundRoot: 0
+SafeAreaRoot: 100
+OverlayRoot: 200
+ModalRoot: 300
+TutorialRoot: 400
+DebugRoot: 1000
+
+Не создавать отдельный Canvas для каждого элемента.
+Допускается отдельный Canvas для:
+- модальных окон;
+- transition overlay;
+- tutorial pointer;
+если это нужно для сортировки.
+
+================================================================================
+9. ИЕРАРХИЯ СЦЕНЫ BOOTSTRAP
+================================================================================
+
+Bootstrap
+├── [Systems]
+│   ├── AppRoot
+│   │   ├── GameBootstrap
+│   │   ├── ServiceContainer
+│   │   └── ApplicationLifecycle
+│   ├── SceneService
+│   ├── SaveService
+│   ├── AudioService
+│   ├── AdsService
+│   ├── AnalyticsService
+│   ├── InputService
+│   └── TimeService
+├── [PersistentUI]
+│   ├── PersistentCanvas
+│   │   ├── FullscreenRoot
+│   │   │   ├── TransitionRoot
+│   │   │   ├── LoadingRoot
+│   │   │   └── GlobalErrorRoot
+│   │   └── EventSystem
+│   └── AudioListener
+└── [Debug]
+    └── DebugBootstrapPanel
+
+Требования:
+- AppRoot помечается DontDestroyOnLoad.
+- Создаётся только один экземпляр.
+- При повторной загрузке Bootstrap дубликат уничтожается.
+- Сервисы создаются до загрузки MainMenu.
+- MainMenu загружается только после завершения инициализации Save, Audio и платформенных сервисов.
+- Ошибка инициализации не должна блокировать запуск локальной игры.
+
+GameBootstrap должен выполнять:
+1. Проверка singleton.
+2. Создание/регистрация сервисов.
+3. Инициализация конфигурации.
+4. Загрузка сохранения.
+5. Установка аудио-настроек.
+6. Инициализация платформенных мостов.
+7. Загрузка MainMenu.
+8. Скрытие LoadingRoot.
+
+================================================================================
+10. ИЕРАРХИЯ СЦЕНЫ MAIN MENU
+================================================================================
+
+MainMenu
+├── [Scene]
+│   ├── MainCamera
+│   ├── SceneContext
+│   └── MainMenuController
+├── [World]
+│   ├── BackgroundRoot
+│   │   ├── ActiveBackground
+│   │   ├── AmbientVFXRoot
+│   │   └── DecorativeAnimationRoot
+│   └── ForegroundDecorRoot
+├── [UI]
+│   └── MainCanvas
+│       └── FullscreenRoot
+│           ├── BackgroundRoot
+│           ├── SafeAreaRoot
+│           │   ├── Header
+│           │   │   ├── Logo
+│           │   │   ├── PuzzleProgressWidget
+│           │   │   └── SettingsButton
+│           │   ├── Center
+│           │   │   ├── CurrentPuzzlePreview
+│           │   │   └── PlayButton
+│           │   └── Footer
+│           │       ├── CollectionButton
+│           │       └── VersionLabel
+│           ├── OverlayRoot
+│           ├── ModalRoot
+│           │   └── SettingsModal
+│           ├── TutorialRoot
+│           └── DebugRoot
+└── [Audio]
+    └── SceneAmbienceMarker
+
+MainMenuController:
+- не содержит бизнес-логику сохранения;
+- читает PlayerProgress через сервис;
+- передаёт данные View-компонентам;
+- открывает Gameplay через SceneService;
+- открывает Collection;
+- управляет SettingsModal.
+
+CurrentPuzzlePreview:
+- показывает текущую иллюстрацию;
+- закрытые части маскируются;
+- не генерирует прогресс самостоятельно;
+- получает PuzzleViewModel.
+
+PlayButton:
+- блокируется на время смены сцены;
+- повторный клик игнорируется.
+
+================================================================================
+11. ИЕРАРХИЯ СЦЕНЫ GAMEPLAY
+================================================================================
+
+Gameplay
+├── [Scene]
+│   ├── MainCamera
+│   ├── SceneContext
+│   ├── GameplayController
+│   └── LevelSession
+├── [World]
+│   ├── BackgroundRoot
+│   │   └── ActiveGameplayBackground
+│   ├── BoardRoot
+│   │   ├── BoardFrame
+│   │   ├── BoardSlotsRoot
+│   │   ├── TilesRoot
+│   │   ├── SelectionFxRoot
+│   │   └── HintFxRoot
+│   ├── TrayRoot
+│   │   ├── TrayBackground
+│   │   ├── TraySlotsRoot
+│   │   ├── TrayTilesRoot
+│   │   └── TrayFxRoot
+│   └── WorldVFXRoot
+├── [UI]
+│   └── GameplayCanvas
+│       └── FullscreenRoot
+│           ├── BackgroundRoot
+│           ├── SafeAreaRoot
+│           │   ├── TopBar
+│           │   │   ├── PauseButton
+│           │   │   ├── LevelBadge
+│           │   │   ├── PuzzleProgress
+│           │   │   └── SettingsButton
+│           │   ├── BoosterBar
+│           │   │   ├── HintButton
+│           │   │   ├── UndoButton
+│           │   │   └── ShuffleButton
+│           │   └── BottomSpacer
+│           ├── OverlayRoot
+│           │   ├── InputBlocker
+│           │   └── RewardFlyRoot
+│           ├── ModalRoot
+│           │   ├── PauseModal
+│           │   ├── VictoryModal
+│           │   ├── FailModal
+│           │   └── RewardedOfferModal
+│           ├── TutorialRoot
+│           │   ├── TutorialDim
+│           │   ├── TutorialHand
+│           │   └── TutorialBubble
+│           └── DebugRoot
+└── [Audio]
+    ├── GameplayMusicMarker
+    └── GameplaySfxEmitter
+
+GameplayController:
+- оркестрирует LevelSession;
+- не знает конкретные Image/Text элементы;
+- не создаёт плитки напрямую;
+- использует BoardController, TrayController, WinConditionEvaluator.
+
+LevelSession:
+- хранит runtime-состояние текущего уровня;
+- не сохраняется напрямую;
+- создаётся при входе;
+- уничтожается при выходе.
+
+BoardRoot:
+- world-space или screen-space должен быть выбран один раз.
+Рекомендуется:
+- игровое поле и плитки внутри Canvas в Screen Space Overlay;
+- не использовать физическую сцену для простого tile match.
+Если реализовано через UI:
+BoardRoot должен находиться внутри SafeAreaRoot между TopBar и Tray.
+В этом случае [World]/BoardRoot заменить на UI/BoardRoot.
+
+Для MVP рекомендуется UI-подход:
+- плитка = RectTransform + Image + Button/PointerHandler;
+- координаты = anchoredPosition;
+- сортировка = sibling index;
+- анимации = RectTransform.
+
+================================================================================
+12. ИЕРАРХИЯ UI-ВАРИАНТА GAMEPLAY
+================================================================================
+
+GameplayCanvas
+└── FullscreenRoot
+    ├── BackgroundRoot
+    │   └── BackgroundImage
+    ├── SafeAreaRoot
+    │   ├── TopBar
+    │   ├── BoardArea
+    │   │   ├── BoardFrame
+    │   │   ├── BoardSlotsRoot
+    │   │   ├── TilesRoot
+    │   │   ├── SelectionFxRoot
+    │   │   └── HintFxRoot
+    │   ├── TrayArea
+    │   │   ├── TrayBackground
+    │   │   ├── TraySlotsRoot
+    │   │   ├── TrayTilesRoot
+    │   │   └── TrayFxRoot
+    │   └── BoosterBar
+    ├── OverlayRoot
+    ├── ModalRoot
+    ├── TutorialRoot
+    └── DebugRoot
+
+Anchors:
+TopBar: stretch horizontal, top.
+BoardArea: stretch horizontal and vertical between TopBar and TrayArea.
+TrayArea: stretch horizontal, bottom; fixed reference height 280–340.
+BoosterBar: anchored above TrayArea.
+TilesRoot: stretch to BoardArea.
+BoardSlotsRoot: same rect as TilesRoot.
+
+================================================================================
+13. ИЕРАРХИЯ СЦЕНЫ PUZZLE ROOM
+================================================================================
+
+PuzzleRoom
+├── [Scene]
+│   ├── MainCamera
+│   ├── SceneContext
+│   └── PuzzleRoomController
+├── [World]
+│   ├── BackgroundRoot
+│   └── AmbientVFXRoot
+├── [UI]
+│   └── PuzzleCanvas
+│       └── FullscreenRoot
+│           ├── BackgroundRoot
+│           ├── SafeAreaRoot
+│           │   ├── Header
+│           │   │   ├── BackButton
+│           │   │   ├── TitleLabel
+│           │   │   └── ProgressLabel
+│           │   ├── PuzzleArea
+│           │   │   ├── PuzzleFrame
+│           │   │   ├── PuzzleImage
+│           │   │   ├── LockedPiecesRoot
+│           │   │   ├── RevealedPiecesRoot
+│           │   │   └── RevealFxRoot
+│           │   └── Footer
+│           │       ├── ContinueButton
+│           │       └── SelectBackgroundButton
+│           ├── OverlayRoot
+│           ├── ModalRoot
+│           │   └── BackgroundUnlockedModal
+│           ├── TutorialRoot
+│           └── DebugRoot
+└── [Audio]
+    └── PuzzleAudioMarker
+
+PuzzleRoomController:
+- получает текущий PuzzleDefinition;
+- отображает количество открытых деталей;
+- запускает reveal-анимацию только для новой детали;
+- после полного пазла разблокирует BackgroundDefinition;
+- вызывает SaveService один раз после изменения прогресса.
+
+Пазл MVP:
+- 5 уровней на одну деталь;
+- рекомендуется 5 деталей на один пазл при 25 уровнях и 5 пазлах только если награда выдаётся чаще.
+Но ранее зафиксировано:
+каждые 5 уровней = 1 деталь;
+5 пазлов при 25 уровнях невозможно, если каждый пазл состоит более чем из одной детали.
+Codex не должен самостоятельно исправлять это противоречие.
+До отдельного решения:
+- реализовать систему данных гибко;
+- PuzzleDefinition содержит requiredPieceCount;
+- LevelDefinition содержит puzzlePieceReward;
+- не хардкодить количество деталей.
+
+================================================================================
+14. ИЕРАРХИЯ СЦЕНЫ COLLECTION
+================================================================================
+
+Collection
+├── [Scene]
+│   ├── MainCamera
+│   ├── SceneContext
+│   └── CollectionController
+├── [UI]
+│   └── CollectionCanvas
+│       └── FullscreenRoot
+│           ├── BackgroundRoot
+│           ├── SafeAreaRoot
+│           │   ├── Header
+│           │   │   ├── BackButton
+│           │   │   └── TitleLabel
+│           │   └── Content
+│           │       ├── ScrollView
+│           │       │   ├── Viewport
+│           │       │   │   └── ContentRoot
+│           │       │   │       └── BackgroundCard instances
+│           │       │   └── Scrollbar optional
+│           │       └── SelectedBackgroundInfo
+│           ├── OverlayRoot
+│           ├── ModalRoot
+│           └── DebugRoot
+└── [Audio]
+    └── CollectionAudioMarker
+
+BackgroundCard prefab hierarchy:
+BackgroundCard
+├── ThumbnailMask
+│   └── Thumbnail
+├── LockedOverlay
+├── SelectedFrame
+├── CheckIcon
+└── SelectButton
+
+Virtualization не нужна для 5 элементов MVP.
+GridLayoutGroup допустим.
+ContentSizeFitter использовать осторожно, не сочетать конфликтно с LayoutElement.
+
+================================================================================
+15. ИЕРАРХИЯ СЦЕНЫ ART VALIDATION
+================================================================================
+
+ArtValidation
+├── [Scene]
+│   ├── MainCamera
+│   └── ArtValidationController
+├── [UI]
+│   └── ValidationCanvas
+│       └── FullscreenRoot
+│           ├── BackgroundSelector
+│           ├── LightBackground
+│           ├── DarkBackground
+│           ├── SpritePreviewRoot
+│           ├── ScaleControls
+│           ├── AtlasPreviewRoot
+│           ├── SafeAreaPreview
+│           └── ValidationInfo
+└── [Debug]
+    └── MissingReferenceScanner
+
+Функции:
+- отображение любого Sprite;
+- переключение светлого/тёмного фона;
+- масштаб 25%, 50%, 100%, 200%, 400%;
+- проверка pivot;
+- проверка 9-Slice;
+- просмотр кадров анимации;
+- отображение реального размера 96, 112, 128 px;
+- список missing references;
+- кнопка validate project art.
+
+Эта сцена Editor/Development only.
+
+================================================================================
+16. ПРЕФАБЫ
+================================================================================
+
+Создать минимум:
+
+Core:
+- AppRoot.prefab
+- PersistentCanvas.prefab
+- EventSystem.prefab
+
+Gameplay:
+- GameplayRoot.prefab
+- BoardView.prefab
+- TrayView.prefab
+- BoosterBar.prefab
+
+Tiles:
+- TileView.prefab
+- TileSlotView.prefab
+- TrayTileView.prefab
+
+Puzzle:
+- PuzzleView.prefab
+- PuzzlePieceView.prefab
+
+UI:
+- PrimaryButton.prefab
+- SecondaryButton.prefab
+- NeutralButton.prefab
+- RoundIconButton.prefab
+- MainPanel.prefab
+- SettingsModal.prefab
+- PauseModal.prefab
+- VictoryModal.prefab
+- FailModal.prefab
+- BackgroundCard.prefab
+- PuzzleProgressWidget.prefab
+
+VFX:
+- TileSelectFx.prefab
+- TripleMatchFx.prefab
+- PuzzleRevealFx.prefab
+- ConfettiFx.prefab
+- SoftFlashFx.prefab
+
+Debug:
+- DebugPanel.prefab
+- FpsCounter.prefab
+- ArtPreview.prefab
+
+Prefab naming:
+PascalCase.
+Файлы prefab без префикса pf_.
+Спрайты сохраняют art naming.
+Скрипты PascalCase.
+
+================================================================================
+17. TILEVIEW PREFAB
+================================================================================
+
+TileView
+├── Shadow
+├── Base
+├── Icon
+├── Highlight
+├── SelectionFxAnchor
+└── InputTarget
+
+Компоненты на корне:
+RectTransform
+CanvasGroup
+TileView
+TilePointerHandler
+
+Не использовать Button, если нужен drag/сложный input.
+Для простого клика допустим IPointerClickHandler.
+
+TileView получает TileViewModel:
+- TileId
+- Sprite
+- IsInteractable
+- SortingIndex
+- BoardPosition
+
+TileView не знает правила совпадения.
+
+================================================================================
+18. SCRIPTABLEOBJECT ДАННЫЕ
+================================================================================
+
+Создать типы:
+
+GameConfig
+TileDefinition
+LevelDefinition
+PuzzleDefinition
+BackgroundDefinition
+AudioConfig
+UiConfig
+AdConfig
+
+GameConfig:
+- List<LevelDefinition> levels
+- List<PuzzleDefinition> puzzles
+- List<BackgroundDefinition> backgrounds
+- AudioConfig audioConfig
+- UiConfig uiConfig
+- string firstSceneAfterBootstrap
+
+TileDefinition:
+- string id
+- Sprite icon
+- Color tint = white
+- AudioClip selectSfx optional
+
+LevelDefinition:
+- int levelNumber
+- List<TileStackDefinition> stacks или serialized board layout
+- int trayCapacity = 7
+- int puzzlePieceReward
+- string puzzleId
+- bool tutorialEnabled
+- LevelDifficulty difficulty
+
+PuzzleDefinition:
+- string id
+- Sprite fullImage
+- int requiredPieceCount
+- List<PuzzlePieceDefinition> pieces
+- string unlockBackgroundId
+
+BackgroundDefinition:
+- string id
+- Sprite menuBackground
+- Sprite gameplayBackground
+- Sprite thumbnail
+- bool unlockedByDefault
+
+Все ID:
+- стабильные строки;
+- snake_case;
+- не зависят от имени файла;
+- не менять после релиза.
+
+================================================================================
+19. SAVE DATA
+================================================================================
+
+PlayerSaveData:
+- int version
+- int currentLevel
+- string currentPuzzleId
+- Dictionary<string, int> puzzleProgress
+- List<string> unlockedBackgroundIds
+- string selectedBackgroundId
+- bool tutorialCompleted
+- AudioSettingsData audio
+- BoosterState boosters optional
+- long lastSaveUnixTime
+
+Сохранение:
+- JSON;
+- локальный fallback через PlayerPrefs;
+- платформенное облако подключается через отдельный адаптер;
+- SaveService скрывает способ хранения.
+
+Интерфейс:
+ISaveStorage
+LoadAsync
+SaveAsync
+DeleteAsync
+
+Реализации:
+PlayerPrefsSaveStorage
+YandexSaveStorage placeholder/adaptor
+
+Не сериализовать UnityEngine.Object.
+Не хранить Sprite, ScriptableObject или ссылки на сцены в save.
+
+Версионирование:
+SaveMigrationService.
+MVP начинает с version = 1.
+
+================================================================================
+20. СЕРВИСЫ
+================================================================================
+
+Интерфейсы:
+ISceneService
+ISaveService
+IAudioService
+IAdsService
+IAnalyticsService
+IInputService
+ITimeService
+
+Не создавать глобальные static manager singleton для каждого сервиса.
+
+Разрешено:
+один AppRoot singleton как composition root.
+
+ServiceContainer:
+- регистрирует интерфейс -> реализация;
+- не должен быть полноценным сложным DI-контейнером;
+- достаточно Dictionary<Type, object>;
+- generic Register<T>, Resolve<T>.
+
+Сцены получают сервисы через SceneContext.
+
+================================================================================
+21. СОБЫТИЯ
+================================================================================
+
+Не создавать глобальный EventBus для всего проекта.
+
+Использовать:
+- C# events внутри подсистем;
+- явные интерфейсы;
+- UnityEvent только для UI-префабов, если удобно;
+- ScriptableObject Event Channels не нужны для MVP.
+
+Основные события:
+LevelStarted
+TileSelected
+TileMovedToTray
+TripleMatched
+TrayChanged
+LevelWon
+LevelFailed
+PuzzlePieceGranted
+PuzzleCompleted
+BackgroundUnlocked
+BackgroundSelected
+SaveCompleted
+AdStarted
+AdCompleted
+AdFailed
+
+Все подписки должны отписываться в OnDisable/Dispose.
+
+================================================================================
+22. GAMEPLAY ARCHITECTURE
+================================================================================
+
+Основные классы:
+
+GameplayController
+LevelSession
+BoardController
+BoardModel
+BoardView
+TileModel
+TileView
+TileFactory
+TrayController
+TrayModel
+TrayView
+MatchResolver
+WinConditionEvaluator
+LoseConditionEvaluator
+MoveHistory
+HintService
+ShuffleService
+
+Правила:
+Model не зависит от Unity UI.
+View не изменяет Model напрямую.
+Controller связывает Model и View.
+TileDefinition — данные ассета.
+TileModel — runtime-состояние экземпляра.
+TileView — визуализация.
+
+Алгоритм клика:
+1. TilePointerHandler сообщает TileView.
+2. TileView вызывает callback Controller.
+3. BoardController проверяет доступность плитки.
+4. TileModel отмечается выбранной.
+5. TileView блокирует ввод.
+6. Плитка анимируется в Tray.
+7. TrayModel вставляет плитку в логически правильное место.
+8. MatchResolver ищет тройку.
+9. При совпадении удаляет три TileModel.
+10. Проверяются win/lose.
+11. Состояние View синхронизируется.
+
+================================================================================
+23. ПРАВИЛА АНИМАЦИЙ
+================================================================================
+
+Не использовать тяжёлую внешнюю tween-библиотеку без разрешения.
+
+Создать простой TweenRunner или использовать корутины.
+
+Стандартные длительности:
+Button press: 0.08 сек
+Button release: 0.12 сек
+Tile select pop: 0.12 сек
+Tile move to tray: 0.28 сек
+Tray reorder: 0.20 сек
+Triple match: 0.32 сек
+Modal open: 0.22 сек
+Modal close: 0.16 сек
+Puzzle reveal: 0.55 сек
+Scene fade: 0.25 сек
+
+Easing:
+UI open: OutBack с малым overshoot
+UI close: InCubic
+Move: OutCubic
+Reorder: InOutCubic
+Flash: OutQuad
+
+Все анимации:
+- должны корректно завершаться при смене сцены;
+- не должны оставлять input заблокированным;
+- должны поддерживать skip/instant complete для тестов.
+
+================================================================================
+24. INPUT
+================================================================================
+
+MVP поддерживает:
+- мышь;
+- touch;
+- один указатель;
+- portrait.
+
+Не поддерживать:
+- multitouch gameplay;
+- drag, если механика основана на клике;
+- keyboard navigation;
+- gamepad.
+
+Input block:
+Во время критических анимаций использовать один глобальный InputBlocker на сцене.
+Не выключать GraphicRaycaster целиком.
+
+Double-click:
+повторный клик по одной плитке во время анимации игнорировать.
+
+================================================================================
+25. AUDIO
+================================================================================
+
+AudioService persistent.
+
+AudioMixer:
+Master
+Music
+SFX
+UI
+Ambience
+
+Настройки:
+Music volume
+SFX volume
+Music enabled
+SFX enabled
+
+Не создавать AudioSource на каждой плитке.
+Использовать пул SFX AudioSource:
+- 4–8 источников;
+- PlayOneShot.
+
+Музыка:
+- один persistent MusicSource;
+- плавная смена 0.5–1.0 сек;
+- не перезапускать при возврате в MainMenu, если трек тот же.
+
+================================================================================
+26. ADS
+================================================================================
+
+MVP:
+только rewarded video.
+
+IAdsService:
+bool IsRewardedAvailable
+Task<AdResult> ShowRewardedAsync(string placement)
+
+Placements:
+revive_after_fail
+extra_hint
+extra_shuffle
+optional_puzzle_bonus только если отдельно утверждено
+
+Gameplay не вызывает SDK напрямую.
+UI вызывает IAdsService.
+Награда выдаётся только при AdResult.Completed.
+
+Editor:
+MockAdsService с симуляцией:
+Completed
+Skipped
+Failed
+
+================================================================================
+27. ANALYTICS
+================================================================================
+
+MVP события:
+game_start
+main_menu_open
+level_start
+tile_select
+level_complete
+level_fail
+puzzle_piece_granted
+puzzle_complete
+background_unlock
+background_select
+rewarded_offer
+rewarded_start
+rewarded_complete
+rewarded_fail
+
+IAnalyticsService должен работать даже при no-op реализации.
+
+Не отправлять персональные данные.
+
+================================================================================
+28. SPRITE ATLAS
+================================================================================
+
+Создать:
+atlas_ui_core.spriteatlas
+atlas_ui_icons.spriteatlas
+atlas_tiles.spriteatlas
+atlas_vfx.spriteatlas
+atlas_puzzle.spriteatlas
+
+Не помещать:
+- полноэкранные фоны;
+- promo;
+- loading background;
+- большие puzzle full images, если это вызывает 4096 atlas без пользы.
+
+Settings:
+Include in Build: On
+Allow Rotation: Off
+Tight Packing:
+- UI Off
+- Tiles On допустимо
+- VFX On допустимо
+Padding: 4
+Для свечения: обеспечить дополнительный прозрачный padding в самом PNG.
+
+Max texture size:
+2048 для большинства.
+4096 только если измеренная экономия draw calls оправдывает память.
+
+================================================================================
+29. АВТОИМПОРТ ГРАФИКИ
+================================================================================
+
+Создать AssetPostprocessor:
+ProjectTexturePostprocessor
+
+Правила по пути:
+
+/Art/UI/
+- Sprite
+- MaxSize 2048
+- MipMaps Off
+- Compression High
+- Wrap Clamp
+
+/Art/Tiles/
+- Sprite
+- MaxSize 512 или 1024 для atlas source
+- MipMaps Off
+- Compression High
+- Wrap Clamp
+- PPU 100
+
+/Art/Backgrounds/
+- Sprite
+- MaxSize 2048
+- MipMaps Off по умолчанию
+- Compression High
+- Crunch optional
+
+/Art/VFX/
+- Sprite
+- MipMaps Off
+- Alpha Is Transparency On
+- Compression High/None
+
+/Art/Textures/
+- Default или Sprite по имени
+- Repeat только tex_*_noise
+- Clamp для mask/light
+
+Не применять настройки бесконечно:
+проверять, изменилось ли значение перед SaveAndReimport.
+
+================================================================================
+30. EDITOR AUTOMATION
+================================================================================
+
+Создать меню:
+
+Tile Puzzle Home/
+├── Setup/
+│   ├── Create Project Folders
+│   ├── Create Default Scenes
+│   ├── Create Build Settings
+│   ├── Create Sprite Atlases
+│   ├── Create Default Data
+│   └── Run Full Project Setup
+├── Art/
+│   ├── Apply Import Settings
+│   ├── Move Known Assets
+│   ├── Validate Art
+│   └── Open Art Validation Scene
+├── Data/
+│   ├── Validate IDs
+│   ├── Create MVP Levels
+│   └── Validate References
+└── QA/
+    ├── Validate Build
+    ├── Find Missing Scripts
+    ├── Find Missing Sprites
+    └── Run Pre-Commit Checks
+
+Full Project Setup должен быть idempotent:
+повторный запуск не создаёт дубликаты и не ломает существующие данные.
+
+================================================================================
+31. ИМЕНОВАНИЕ
+================================================================================
+
+Классы:
+PascalCase
+
+Методы:
+PascalCase
+
+Поля private:
+_camelCase
+
+Параметры:
+camelCase
+
+Интерфейсы:
+IServiceName
+
+ScriptableObject классы:
+TileDefinition
+LevelDefinition
+
+ScriptableObject файлы:
+tile_mug.asset
+level_001.asset
+puzzle_001.asset
+background_001.asset
+
+Scenes:
+PascalCase
+
+Prefabs:
+PascalCase
+
+Art:
+как задано в Art Bible, snake_case.
+
+Не использовать:
+Manager для каждого класса.
+Manager допустим только если роль действительно глобальная, но предпочтительнее Service/Controller.
+
+================================================================================
+32. КОД-СТАНДАРТ
+================================================================================
+
+- Nullable reference types включать, если проект поддерживает без лишнего шума.
+- Использовать explicit access modifiers.
+- Не использовать public fields для сериализации.
+- Использовать [SerializeField] private.
+- Не использовать LINQ в горячих gameplay-циклах без необходимости.
+- Не вызывать FindObjectOfType в runtime.
+- Не использовать Resources.Load для основного контента.
+- Не хранить пути строками в gameplay-коде.
+- Не использовать async void, кроме UI event wrappers.
+- Все Task методы должны обрабатывать исключения.
+- Не подавлять ошибки пустыми catch.
+- Не создавать GC allocations каждый кадр.
+- Update использовать только там, где реально нужен.
+- Не создавать coroutine per tile каждый кадр.
+- Не использовать reflection в runtime.
+- Логи оборачивать через ProjectLogger.
+
+================================================================================
+33. ЛОГИРОВАНИЕ
+================================================================================
+
+Создать ProjectLogger:
+Info
+Warning
+Error
+
+В release:
+- подробные Info можно отключать define symbol.
+- Error сохраняются.
+
+Категории:
+Bootstrap
+Save
+Scene
+Gameplay
+Ads
+Audio
+Analytics
+ArtValidation
+
+Не логировать каждый кадр и каждый tween-step.
+
+================================================================================
+34. ТЕСТЫ
+================================================================================
+
+EditMode:
+- MatchResolver finds exactly three.
+- Tray inserts correctly.
+- Tray overflow triggers lose.
+- Win condition when board empty.
+- Save serialization roundtrip.
+- Save migration v1.
+- Puzzle progress grants background.
+- Duplicate IDs validation.
+
+PlayMode:
+- Bootstrap loads MainMenu.
+- MainMenu Play opens Gameplay.
+- Tile click moves tile to tray.
+- Triple removes tiles.
+- Victory modal appears.
+- Save persists selected background.
+
+Не стремиться к 100% coverage.
+Покрыть критическую бизнес-логику.
+
+================================================================================
+35. ПОРЯДОК РЕАЛИЗАЦИИ CODEX
+================================================================================
+
+TASK 001
+Создать структуру папок и asmdef.
+
+TASK 002
+Создать ProjectSetup editor tooling.
+
+TASK 003
+Создать URP 2D settings и назначить их проекту.
+
+TASK 004
+Создать пустые сцены и Build Settings.
+
+TASK 005
+Создать Bootstrap hierarchy и базовые сервисные интерфейсы.
+
+TASK 006
+Создать SceneService и переход Bootstrap -> MainMenu.
+
+TASK 007
+Создать SaveData, PlayerPrefsSaveStorage и SaveService.
+
+TASK 008
+Создать MainMenu hierarchy и controller.
+
+TASK 009
+Создать базовые UI prefabs и SafeAreaFitter.
+
+TASK 010
+Создать ScriptableObject definitions.
+
+TASK 011
+Создать TileModel, TrayModel, MatchResolver с EditMode тестами.
+
+TASK 012
+Создать Gameplay hierarchy.
+
+TASK 013
+Создать TileView, TileFactory, BoardController.
+
+TASK 014
+Создать TrayView и анимацию перемещения.
+
+TASK 015
+Создать win/lose flow.
+
+TASK 016
+Создать PuzzleRoom.
+
+TASK 017
+Создать Collection.
+
+TASK 018
+Создать AudioService.
+
+TASK 019
+Создать Ads abstraction и mock.
+
+TASK 020
+Создать Analytics abstraction.
+
+TASK 021
+Создать AssetPostprocessor и Sprite Atlases.
+
+TASK 022
+Создать ArtValidation scene.
+
+TASK 023
+Создать MVP data assets.
+
+TASK 024
+Создать tutorial flow.
+
+TASK 025
+Создать build validation.
+
+Codex не должен переходить к следующей задаче, если текущая:
+- не компилируется;
+- ломает сцены;
+- содержит missing scripts;
+- не имеет краткого отчёта.
+
+================================================================================
+36. ФОРМАТ ОТЧЁТА CODEX ПО КАЖДОЙ ЗАДАЧЕ
+================================================================================
+
+Codex должен отвечать:
+
+1. Выполнено
+Краткий список изменений.
+
+2. Созданные файлы
+Полные пути.
+
+3. Изменённые файлы
+Полные пути.
+
+4. Архитектурные решения
+Только решения, которые не были прямо указаны в ТЗ.
+
+5. Проверки
+- compilation
+- tests
+- scene validation
+- missing references
+
+6. Ограничения
+Что нельзя было проверить без Unity Editor, SDK или графики.
+
+7. Следующий безопасный шаг
+Только одна следующая задача.
+
+================================================================================
+37. КРИТЕРИИ ГОТОВНОСТИ ТЕХНИЧЕСКОГО ФУНДАМЕНТА
+================================================================================
+
+Фундамент готов, когда:
+
+[ ] Проект открывается в Unity 6000.3.20f1 без ошибок.
+[ ] Bootstrap загружает MainMenu.
+[ ] Все сцены находятся в Build Settings.
+[ ] Все сцены имеют правильную иерархию.
+[ ] Canvas адаптируется под safe area.
+[ ] Сервисы не дублируются.
+[ ] Save создаётся и загружается.
+[ ] Есть базовые ScriptableObject.
+[ ] Есть ArtValidation.
+[ ] Импорт графики автоматизирован.
+[ ] Sprite Atlas созданы.
+[ ] EditMode тесты проходят.
+[ ] Нет FindObjectOfType в runtime.
+[ ] Нет missing scripts.
+[ ] Нет прямой зависимости gameplay от Yandex SDK.
+[ ] Проект может сделать пустой WebGL build.
+
+================================================================================
+38. ЗАПРЕТЫ ДЛЯ CODEX
+================================================================================
+
+Запрещено без отдельной команды:
+
+- устанавливать Zenject/VContainer;
+- устанавливать DOTween;
+- устанавливать Addressables;
+- использовать ECS/DOTS;
+- использовать Entities;
+- создавать сетевой код;
+- создавать LiveOps;
+- создавать ежедневные награды;
+- создавать валюту;
+- добавлять жизни;
+- добавлять PvP;
+- добавлять Firebase;
+- добавлять backend;
+- создавать сложный DI;
+- создавать глобальный event bus;
+- менять ориентацию;
+- менять базовое разрешение;
+- менять количество слотов в tray;
+- менять стиль именования;
+- менять архитектуру UI на world-space;
+- менять URP на Built-in;
+- делать обязательную рекламу.
+
+================================================================================
+39. ПЕРВОЕ ЗАДАНИЕ ДЛЯ CODEX
+================================================================================
+
+Выполнить TASK 001–004 одним подготовительным пакетом:
+
+1. Создать полную структуру папок Assets/_Project.
+2. Создать asmdef.
+3. Создать Editor menu Tile Puzzle Home/Setup.
+4. Создать команды:
+   - Create Project Folders
+   - Create Default Scenes
+   - Create Build Settings
+   - Run Full Project Setup
+5. Создать сцены:
+   - Bootstrap
+   - MainMenu
+   - Gameplay
+   - PuzzleRoom
+   - Collection
+   - ArtValidation
+6. Создать в каждой сцене корневые объекты согласно этому документу.
+7. Добавить первые пять сцен в Build Settings.
+8. ArtValidation не добавлять.
+9. Создать README в Documentation/Technical с описанием структуры.
+10. Проверить повторный запуск Full Project Setup.
+11. Не создавать gameplay-логику на этом шаге.
+12. Не подключать Yandex SDK на этом шаге.
+
+КОНЕЦ CODEX MASTER SPECIFICATION
