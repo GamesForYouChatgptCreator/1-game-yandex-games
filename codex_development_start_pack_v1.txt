@@ -1,0 +1,1376 @@
+CODEX DEVELOPMENT START PACK
+Проект: Tile Puzzle Home
+Версия: MVP 1.0
+Назначение: полный набор решений, после которого Codex может начинать разработку без дополнительных проектных вопросов.
+Связанный документ: codex_master_spec_tile_puzzle_home.txt
+
+================================================================================
+РАЗДЕЛ A. ЗАФИКСИРОВАННЫЕ РЕШЕНИЯ MVP
+================================================================================
+
+1. Платформа:
+Unity 6000.3.20f1
+URP 2D
+WebGL
+Yandex Games
+Portrait
+Базовое разрешение UI 1080×1920
+
+2. Объём первой версии:
+25 уровней
+12 типов плиток
+1 основной игровой режим
+1 пятичастный пазл
+5 стадий комнаты
+5 фонов в коллекции
+3 бустера: подсказка, отмена, перемешивание
+Rewarded video
+Локальное сохранение
+Платформенный адаптер сохранения
+Русский язык интерфейса
+
+3. Главная структура прогресса:
+Уровни 1–5 -> часть пазла 1 -> фон/стадия комнаты 2
+Уровни 6–10 -> часть пазла 2 -> фон/стадия комнаты 3
+Уровни 11–15 -> часть пазла 3 -> фон/стадия комнаты 4
+Уровни 16–20 -> часть пазла 4 -> фон/стадия комнаты 5
+Уровни 21–25 -> часть пазла 5 -> пазл завершён, финальная награда и отметка полного прохождения MVP
+
+Фон 1 доступен с первого запуска.
+Фоны 2–5 открываются после частей пазла 1–4.
+Пятая часть завершает пазл и открывает финальное состояние комнаты с котом, если оно ещё не было выдано.
+Для устранения двусмысленности:
+- puzzle_piece_01 открывает bg_room_stage_02;
+- puzzle_piece_02 открывает bg_room_stage_03;
+- puzzle_piece_03 открывает bg_room_stage_04;
+- puzzle_piece_04 открывает bg_room_stage_05;
+- puzzle_piece_05 завершает пазл и открывает completion badge.
+Таким образом в коллекции ровно 5 фонов: stage_01 доступен сразу, stage_02–05 открываются по прогрессу.
+
+4. После уровня 25:
+Показывается экран завершения первой версии.
+Кнопка «Играть снова» запускает случайный ранее пройденный уровень.
+Прогресс не сбрасывается.
+Новые уровни не генерируются в MVP.
+
+================================================================================
+РАЗДЕЛ B. GAMEPLAY RULES SPECIFICATION
+================================================================================
+
+B1. Базовая механика
+
+Игрок нажимает на доступную плитку.
+Плитка перемещается в нижний лоток.
+Лоток имеет 7 слотов.
+Три одинаковые плитки автоматически удаляются.
+Уровень выигран, когда на поле не осталось плиток и лоток пуст.
+Уровень проигран, когда после завершения всех текущих анимаций в лотке заняты все 7 слотов и нет тройки для удаления.
+
+B2. Определение доступной плитки
+
+Плитка доступна, если:
+1. Она существует в активном BoardModel.
+2. Она не находится в состоянии Moving, Matched или Removed.
+3. Её верхняя центральная область не перекрыта другой активной плиткой более чем на 20%.
+4. Для упрощённой реализации MVP допускается логическая блокировка через список coveringTileIds в данных уровня.
+5. Плитка становится доступной только после удаления всех плиток из coveringTileIds.
+
+Codex должен реализовать логическую систему зависимостей, а не вычислять геометрическое перекрытие каждый кадр.
+
+TilePlacementData:
+- string instanceId
+- string tileDefinitionId
+- Vector2 anchoredPosition
+- int layer
+- List<string> coveringTileIds
+- float rotationDegrees
+
+Допустимые повороты:
+0
+-4
++4
+Не использовать большие случайные углы.
+
+B3. Состояния плитки
+
+Hidden
+Blocked
+Available
+Selected
+MovingToTray
+InTray
+Matching
+Removed
+
+Переходы:
+Blocked -> Available
+Available -> Selected
+Selected -> MovingToTray
+MovingToTray -> InTray
+InTray -> Matching
+Matching -> Removed
+
+Запрещён возврат Removed в активное состояние.
+Undo может вернуть только последнюю плитку в состоянии InTray, если после её хода ещё не произошло совпадение.
+
+B4. Ввод
+
+Основное действие: один клик/тап.
+Плитка принимает ввод только в Available.
+Во время глобальной критической анимации ввод блокируется.
+Повторный клик по выбранной плитке игнорируется.
+Одновременно перемещается только одна плитка.
+Следующий ввод разрешается после помещения предыдущей плитки в TrayModel.
+Анимация удаления тройки может идти параллельно с последующим выбором только после стабильной первой версии; по умолчанию ввод блокируется до завершения удаления.
+
+B5. Лоток
+
+Вместимость: 7.
+Плитки сортируются группами одинаковых типов.
+При добавлении:
+1. Найти последнюю плитку того же типа.
+2. Вставить новую сразу после группы.
+3. Если таких плиток нет — вставить в конец.
+4. После вставки проверить тройку.
+5. При наличии ровно трёх или более одинаковых плиток удалить первые три из группы.
+6. В MVP невозможно иметь больше трёх одинаковых плиток в лотке до проверки, потому что проверка происходит после каждого хода.
+
+Пример:
+До: A B B C
+Добавили B
+После вставки: A B B B C
+После удаления: A C
+
+B6. Победа
+
+Условия:
+- BoardModel.ActiveTileCount == 0
+- TrayModel.Count == 0
+- нет активных анимаций перемещения или совпадения
+
+После победы:
+1. Заблокировать ввод.
+2. Проиграть финальный VFX.
+3. Сохранить завершение уровня.
+4. Увеличить currentLevel, но не выше 25.
+5. Если уровень кратен 5 — выдать puzzle piece.
+6. Показать VictoryModal.
+7. Кнопка «Продолжить»:
+   - обычный уровень -> следующий Gameplay;
+   - уровень 5,10,15,20,25 -> PuzzleRoom.
+
+B7. Поражение
+
+Условия:
+- TrayModel.Count == 7
+- MatchResolver не нашёл тройку
+- нет незавершённой анимации
+- нет автоматического удаления
+
+После поражения:
+1. Заблокировать ввод.
+2. Показать FailModal.
+3. Доступные действия:
+   - Повторить;
+   - Отмена последнего хода, если доступна;
+   - Rewarded revive, если реклама доступна.
+
+Revive:
+- удалить из лотка до двух последних плиток;
+- вернуть их на исходные позиции поля;
+- если исходная позиция уже логически освобождена, вернуть поверх текущего состояния с layer выше;
+- разрешить только один revive за попытку;
+- после revive сохранить только session-состояние, не постоянный прогресс.
+
+B8. Подсказка
+
+HintService ищет:
+1. Доступную плитку типа, которого уже две в лотке.
+2. Затем типа, которого одна в лотке.
+3. Затем любой тип, для которого доступны минимум три плитки в текущей цепочке разблокировки.
+4. Если вариантов нет, выбрать доступную плитку с минимальным количеством блокируемых зависимостей.
+
+Визуально подсветить одну плитку 2.5 секунды.
+Не перемещать плитку автоматически.
+Бесплатные подсказки на старте: 3.
+После исчерпания можно предложить rewarded video за одну подсказку.
+
+B9. Отмена
+
+UndoService хранит последний стабильный MoveSnapshot.
+Разрешена, если:
+- после последнего хода не было удаления тройки;
+- уровень не завершён;
+- плитка всё ещё в лотке;
+- исходная позиция известна.
+
+Отмена:
+- убрать плитку из лотка;
+- вернуть в BoardModel;
+- восстановить зависимости;
+- проиграть обратную анимацию.
+
+Бесплатные отмены на старте: 3.
+
+B10. Перемешивание
+
+Shuffle:
+- изменяет только tileDefinitionId среди активных неперемещённых плиток;
+- сохраняет количество каждого типа;
+- не меняет позиции и coveringTileIds;
+- после перемешивания должен существовать хотя бы один безопасный ход;
+- не затрагивает плитки в лотке.
+
+Бесплатные перемешивания на старте: 2.
+
+B11. Гарантия решаемости
+
+Каждый уровень создаётся из количества плиток, кратного 3.
+Каждый тип присутствует в количестве, кратном 3.
+Уровень должен иметь заранее сохранённую solutionOrder — порядок instanceId, который гарантированно решает уровень.
+Codex должен создать LevelValidator:
+- проверка уникальности instanceId;
+- проверка существования tileDefinitionId;
+- проверка кратности общего количества;
+- проверка кратности каждого типа;
+- проверка отсутствия циклов coveringTileIds;
+- симуляция solutionOrder;
+- проверка tray capacity 7;
+- проверка победы в конце симуляции.
+
+Если LevelValidator не проходит, LevelDefinition считается недопустимым.
+
+B12. Перезапуск
+
+Restart:
+- сбрасывает только текущую LevelSession;
+- не тратит бустеры повторно за уже отменённые действия;
+- не меняет постоянный прогресс;
+- создаёт доску из исходного LevelDefinition.
+
+B13. Пауза и потеря фокуса
+
+При Application.focus == false:
+- поставить gameplay-анимации на паузу, если возможно;
+- приглушить или приостановить музыку;
+- не показывать PauseModal автоматически в WebGL;
+- заблокировать новые действия до возврата фокуса.
+
+Кнопка Pause:
+- открывает PauseModal;
+- останавливает игровой ввод;
+- Time.timeScale не менять, чтобы UI-анимации продолжались;
+- использовать локальный pause flag.
+
+================================================================================
+РАЗДЕЛ C. ШАБЛОНЫ ПОЛЯ
+================================================================================
+
+Все поля работают в RectTransform BoardArea размером 900×980 reference pixels.
+
+Координатная сетка:
+X: от -360 до +360
+Y: от -400 до +400
+
+Размер визуальной плитки:
+126×126 px на уровнях 1–10
+118×118 px на уровнях 11–20
+112×112 px на уровнях 21–25
+
+Шаблон T01 — Tutorial Flat 12
+12 плиток, 4 типа, без перекрытий.
+Ряды 4×3.
+Используется уровень 1.
+
+Шаблон T02 — Flat 18
+18 плиток, 6 типов.
+Ряды 6×3.
+Без перекрытий.
+Используется уровень 2.
+
+Шаблон T03 — Cross 24
+Нижний слой 16 плиток.
+Верхний слой 8 плиток.
+Верхние плитки перекрывают пары нижних.
+Используется уровни 3–4.
+
+Шаблон T04 — Diamond 30
+Нижний слой 18.
+Средний слой 9.
+Верхний слой 3.
+Используется уровни 5–7.
+
+Шаблон T05 — Twin Towers 36
+Две симметричные группы.
+Нижний слой 18.
+Средний слой 12.
+Верхний слой 6.
+Используется уровни 8–10.
+
+Шаблон T06 — Steps 42
+Нижний слой 18.
+Средний слой 15.
+Верхний слой 9.
+Используется уровни 11–14.
+
+Шаблон T07 — Frame 48
+Внешняя рамка и центральный блок.
+Нижний слой 24.
+Средний слой 15.
+Верхний слой 9.
+Используется уровни 15–18.
+
+Шаблон T08 — Cozy Stack 54
+Три кластера.
+Нижний слой 24.
+Средний слой 18.
+Верхний слой 12.
+Используется уровни 19–22.
+
+Шаблон T09 — Final Room 60
+Четыре кластера.
+Нижний слой 27.
+Средний слой 21.
+Верхний слой 12.
+Используется уровни 23–25.
+
+Codex должен реализовать шаблоны как данные, не как procedural random generation.
+Каждый LevelDefinition хранит итоговые TilePlacementData.
+
+================================================================================
+РАЗДЕЛ D. MVP CONTENT SPECIFICATION — 25 УРОВНЕЙ
+================================================================================
+
+Tile IDs:
+mug
+book
+candle
+pillow
+plant
+clock
+teapot
+blanket
+lamp
+yarn
+cookie
+key
+
+Для каждого уровня ниже:
+- total — общее число плиток;
+- types — используемые типы;
+- triples — количество троек каждого типа;
+- template — шаблон;
+- tutorial — специальный сценарий;
+- reward — награда.
+
+LEVEL 001
+template: T01
+total: 12
+types/triples:
+mug 1
+book 1
+candle 1
+pillow 1
+difficulty: tutorial
+tutorial:
+1. Подсветить первую mug.
+2. После выбора подсветить вторую mug.
+3. После выбора подсветить третью mug.
+4. Показать объяснение исчезновения тройки.
+5. Остаток уровня свободный.
+reward: none
+
+LEVEL 002
+template: T02
+total: 18
+types:
+mug 1
+book 1
+candle 1
+pillow 1
+plant 1
+clock 1
+difficulty: very_easy
+reward: none
+
+LEVEL 003
+template: T03
+total: 24
+types:
+mug 1
+book 1
+candle 1
+pillow 1
+plant 1
+clock 1
+teapot 1
+blanket 1
+difficulty: easy
+tutorial: показать заблокированную плитку и верхнюю плитку
+reward: none
+
+LEVEL 004
+template: T03
+total: 24
+types:
+mug 2
+book 1
+candle 1
+pillow 1
+plant 1
+clock 1
+teapot 1
+difficulty: easy
+reward: none
+
+LEVEL 005
+template: T04
+total: 30
+types:
+mug 2
+book 2
+candle 1
+pillow 1
+plant 1
+clock 1
+teapot 1
+blanket 1
+difficulty: easy
+reward: puzzle_piece_01, unlock bg_room_stage_02
+
+LEVEL 006
+template: T04
+total: 30
+types:
+mug 1
+book 1
+candle 1
+pillow 1
+plant 1
+clock 1
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+difficulty: easy
+reward: none
+
+LEVEL 007
+template: T04
+total: 30
+types:
+mug 2
+book 2
+candle 1
+pillow 1
+plant 1
+clock 1
+teapot 1
+blanket 1
+difficulty: easy_plus
+reward: none
+
+LEVEL 008
+template: T05
+total: 36
+types:
+mug 2
+book 2
+candle 2
+pillow 1
+plant 1
+clock 1
+teapot 1
+blanket 1
+lamp 1
+difficulty: medium_low
+tutorial: показать кнопку Hint
+reward: none
+
+LEVEL 009
+template: T05
+total: 36
+types:
+mug 2
+book 1
+candle 2
+pillow 1
+plant 2
+clock 1
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+difficulty: medium_low
+reward: none
+
+LEVEL 010
+template: T05
+total: 36
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 1
+clock 1
+teapot 1
+blanket 1
+difficulty: medium
+reward: puzzle_piece_02, unlock bg_room_stage_03
+
+LEVEL 011
+template: T06
+total: 42
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 1
+teapot 1
+blanket 1
+lamp 1
+difficulty: medium
+reward: none
+
+LEVEL 012
+template: T06
+total: 42
+types:
+mug 2
+book 2
+candle 2
+pillow 1
+plant 2
+clock 1
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+difficulty: medium
+tutorial: показать Undo после специально безопасного хода
+reward: none
+
+LEVEL 013
+template: T06
+total: 42
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 1
+blanket 1
+difficulty: medium
+reward: none
+
+LEVEL 014
+template: T06
+total: 42
+types:
+mug 3
+book 2
+candle 2
+pillow 2
+plant 1
+clock 1
+teapot 1
+blanket 1
+lamp 1
+difficulty: medium_plus
+reward: none
+
+LEVEL 015
+template: T07
+total: 48
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+difficulty: medium_plus
+reward: puzzle_piece_03, unlock bg_room_stage_04
+
+LEVEL 016
+template: T07
+total: 48
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 1
+lamp 1
+yarn 1
+difficulty: medium_plus
+reward: none
+
+LEVEL 017
+template: T07
+total: 48
+types:
+mug 3
+book 2
+candle 2
+pillow 2
+plant 2
+clock 1
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+difficulty: medium_plus
+reward: none
+
+LEVEL 018
+template: T07
+total: 48
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 2
+difficulty: hard_low
+tutorial: показать Shuffle, если нет очевидной пары
+reward: none
+
+LEVEL 019
+template: T08
+total: 54
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 2
+lamp 1
+yarn 1
+difficulty: hard_low
+reward: none
+
+LEVEL 020
+template: T08
+total: 54
+types:
+mug 3
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+key 1
+difficulty: hard_low
+reward: puzzle_piece_04, unlock bg_room_stage_05
+
+LEVEL 021
+template: T08
+total: 54
+types:
+mug 2
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 2
+lamp 2
+difficulty: hard
+reward: none
+
+LEVEL 022
+template: T08
+total: 54
+types:
+mug 3
+book 3
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+key 1
+difficulty: hard
+reward: none
+
+LEVEL 023
+template: T09
+total: 60
+types:
+mug 3
+book 2
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 2
+lamp 1
+yarn 1
+cookie 1
+difficulty: hard
+reward: none
+
+LEVEL 024
+template: T09
+total: 60
+types:
+mug 3
+book 3
+candle 2
+pillow 2
+plant 2
+clock 2
+teapot 2
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+difficulty: hard_plus
+reward: none
+
+LEVEL 025
+template: T09
+total: 60
+types:
+mug 3
+book 3
+candle 3
+pillow 2
+plant 2
+clock 2
+teapot 1
+blanket 1
+lamp 1
+yarn 1
+cookie 1
+difficulty: final
+reward: puzzle_piece_05, puzzle_complete, completion_badge
+
+Примечание по triples:
+Число означает количество троек.
+Например mug 2 = 6 плиток mug.
+Сумма троек × 3 должна совпадать с total.
+LevelData generator должен валидировать это автоматически.
+
+================================================================================
+РАЗДЕЛ E. ГЕНЕРАЦИЯ КОНКРЕТНЫХ LEVELDEFINITION
+================================================================================
+
+Codex должен создать Editor-команду:
+Tile Puzzle Home/Data/Create MVP Levels
+
+Команда:
+1. Создаёт или обновляет level_001.asset ... level_025.asset.
+2. Не создаёт дубликаты.
+3. Использует шаблоны T01–T09.
+4. Распределяет tileDefinitionId по позициям согласно solutionOrder.
+5. Создаёт coveringTileIds без циклов.
+6. Валидирует каждый уровень.
+7. Сохраняет ValidationReport в Documentation/QA/level_validation_report.txt.
+
+Алгоритм заполнения:
+1. Сформировать список типов по количеству троек.
+2. Создать безопасную solutionOrder группами по 3 одинаковых типа.
+3. Разложить группы по позициям так, чтобы первые доступные плитки не создавали автоматическую очевидную победу на каждом ходе.
+4. Для уровней 1–5 допускать две доступные плитки одного типа одновременно.
+5. Для уровней 6–15 чаще давать 1–2 совпадающих плитки.
+6. Для уровней 16–25 чередовать типы, но solutionOrder должен оставаться безопасным.
+7. Использовать deterministic seed = levelNumber * 1009.
+8. Результат генерации должен быть стабильным между запусками.
+
+Запрещено:
+- runtime procedural generation;
+- случайно менять уровень при повторном запуске;
+- создавать уровень без solutionOrder;
+- выпускать уровень с непройденной валидацией.
+
+================================================================================
+РАЗДЕЛ F. PROGRESSION AND PUZZLE SPECIFICATION
+================================================================================
+
+F1. Player progression
+
+currentLevel:
+- начальное значение 1;
+- после победы становится min(completedLevel + 1, 25);
+- после уровня 25 остаётся 25;
+- completedLevels хранить HashSet<int> или List<int>.
+
+F2. Puzzle progress
+
+Один PuzzleDefinition:
+id = cozy_room_puzzle
+requiredPieceCount = 5
+
+Награды:
+level 5 -> piece index 0
+level 10 -> piece index 1
+level 15 -> piece index 2
+level 20 -> piece index 3
+level 25 -> piece index 4
+
+Пазл показывает полную картинку puzzle_05_cat.
+Закрытые части перекрыты locked-piece overlay.
+Пять частей располагаются:
+0 — верхний левый сектор
+1 — верхний правый сектор
+2 — центральный сектор
+3 — нижний левый сектор
+4 — нижний правый сектор
+
+Для MVP детали не обязаны иметь сложные реальные пазловые маски.
+Допустимо использовать пять декоративных масок одинакового стиля.
+
+F3. Фоны
+
+bg_room_stage_01:
+unlockedByDefault = true
+
+bg_room_stage_02:
+unlockCondition = piece 0
+
+bg_room_stage_03:
+unlockCondition = piece 1
+
+bg_room_stage_04:
+unlockCondition = piece 2
+
+bg_room_stage_05:
+unlockCondition = piece 3
+
+piece 4:
+unlock completion_badge
+
+F4. Выбранный фон
+
+После открытия нового фона:
+- показать BackgroundUnlockedModal;
+- новая стадия автоматически становится выбранной;
+- игрок может позже выбрать любую открытую стадию в Collection;
+- выбранный фон используется в MainMenu и Gameplay.
+
+F5. Повторное прохождение
+
+Повторная победа на уже завершённом уровне:
+- не выдаёт повторную часть пазла;
+- не открывает фон повторно;
+- не меняет completedLevels;
+- может показывать обычное окно победы без награды.
+
+================================================================================
+РАЗДЕЛ G. UI STATE AND NAVIGATION SPECIFICATION
+================================================================================
+
+G1. Общие состояния кнопки
+
+Normal
+Highlighted
+Pressed
+Disabled
+Busy
+
+Busy:
+- визуально как Disabled с alpha 0.85;
+- принимает ноль кликов;
+- используется при async операции или переходе сцены.
+
+Каждый обработчик клика должен иметь re-entry guard.
+
+G2. Splash/Bootstrap
+
+Состояния:
+Initializing
+LoadingSave
+LoadingPlatform
+OpeningMainMenu
+ErrorFallback
+
+Минимальное время показа loading: 0.6 секунды.
+Максимальное ожидание платформенных сервисов: 5 секунд.
+После timeout игра запускается с локальным fallback.
+
+G3. MainMenu
+
+PlayButton:
+- Normal, если GameConfig загружен;
+- Busy во время перехода;
+- Disabled только при критической ошибке данных.
+
+CollectionButton:
+- всегда активна после загрузки save.
+
+SettingsButton:
+- открывает SettingsModal;
+- повторный клик не создаёт второй modal.
+
+Back browser:
+- на MainMenu ничего не делает;
+- не закрывает страницу.
+
+G4. SettingsModal
+
+Открытие:
+- InputBlocker On;
+- dim overlay;
+- scale 0.92 -> 1.0;
+- alpha 0 -> 1.
+
+Закрытие:
+- CloseButton;
+- клик по dim overlay допускается;
+- browser back закрывает modal;
+- изменения аудио применяются сразу;
+- SaveService вызывается после закрытия, не на каждый слайдер tick.
+
+G5. Gameplay
+
+PauseButton:
+- открывает PauseModal;
+- блокирует BoardArea.
+
+Booster buttons:
+- Disabled, если count == 0 и реклама недоступна;
+- при count == 0 и реклама доступна показывает rewarded offer;
+- Busy во время выполнения.
+
+InputBlocker:
+- активен при переносе плитки, перестановке лотка, удалении тройки, победе, поражении.
+
+G6. PauseModal
+
+Действия:
+Продолжить
+Перезапустить
+В главное меню
+Настройки
+
+Перезапустить:
+- показать confirm только если сделано минимум 3 хода;
+- иначе сразу restart.
+
+В главное меню:
+- session не сохранять;
+- постоянный прогресс не менять.
+
+G7. VictoryModal
+
+Обычный уровень:
+- заголовок «Уровень пройден»
+- кнопка «Дальше»
+- дополнительная кнопка «В меню»
+
+Milestone level:
+- заголовок «Новая деталь пазла»
+- кнопка «Посмотреть»
+- переход PuzzleRoom
+
+Кнопки активируются после завершения основной victory-анимации.
+
+G8. FailModal
+
+Действия:
+- «Повторить»
+- «Вернуть ход», если Undo доступна
+- «Продолжить за рекламу», если rewarded доступна и revive ещё не использован
+- «В меню»
+
+Нельзя закрыть кликом по затемнению.
+
+G9. PuzzleRoom
+
+При входе после milestone:
+- показать только новую часть;
+- закрытые части остаются затемнёнными;
+- reveal анимация обязательна один раз;
+- после анимации открыть ContinueButton.
+
+Если пазл завершён:
+- конфетти;
+- completion badge;
+- текст «Комната готова»;
+- Continue -> MainMenu.
+
+G10. Collection
+
+Locked card:
+- SelectButton disabled;
+- overlay visible.
+
+Unlocked card:
+- SelectButton enabled.
+
+Selected card:
+- selected frame;
+- check icon;
+- button text «Выбрано» и disabled.
+
+После выбора:
+- save;
+- обновить все карточки;
+- фон сцены плавно сменить за 0.25 сек.
+
+G11. Tutorial
+
+Tutorial blocks input outside highlighted target.
+Пользователь должен выполнить действие, а не просто нажать «Далее».
+Tutorial state сохраняется.
+Повторно обучение не показывается после tutorialCompleted.
+В Settings добавить кнопку «Повторить обучение» только в debug/development, не в MVP UI.
+
+G12. Error states
+
+Save load failed:
+- создать default save;
+- показать ненавязчивое сообщение только один раз.
+
+Ad failed:
+- закрыть loading;
+- не выдавать награду;
+- показать «Видео сейчас недоступно».
+
+Missing sprite:
+- использовать dev_missing_sprite только в Development;
+- в Release скрывать объект и логировать ошибку.
+
+================================================================================
+РАЗДЕЛ H. CODEX TASK PACK
+================================================================================
+
+Каждую задачу выполнять отдельно.
+После каждой задачи:
+- compilation;
+- tests;
+- краткий отчёт;
+- commit-ready state.
+
+TASK 001 — PROJECT SCAFFOLD
+Цель:
+Создать структуру папок, asmdef, Editor Setup menu, сцены и Build Settings.
+
+Разрешено:
+Assets/_Project
+Documentation/Technical
+ProjectSettings при необходимости
+
+Запрещено:
+gameplay logic
+Yandex SDK
+внешние пакеты
+
+Acceptance:
+- все папки созданы;
+- шесть сцен созданы;
+- пять релизных сцен в Build Settings;
+- повторный Full Setup не создаёт дубликаты;
+- проект компилируется.
+
+TASK 002 — BOOTSTRAP AND SERVICE CONTAINER
+Цель:
+AppRoot, ServiceContainer, GameBootstrap, SceneService.
+
+Acceptance:
+- Bootstrap стартует;
+- AppRoot один;
+- MainMenu загружается;
+- повторный Bootstrap не дублирует сервисы.
+
+TASK 003 — SAVE SYSTEM
+Цель:
+PlayerSaveData v1, PlayerPrefsSaveStorage, SaveService, migration.
+
+Acceptance:
+- default save;
+- roundtrip test;
+- corrupted JSON fallback;
+- currentLevel и selectedBackground сохраняются.
+
+TASK 004 — DATA DEFINITIONS
+Цель:
+Создать GameConfig, TileDefinition, LevelDefinition, PuzzleDefinition, BackgroundDefinition.
+
+Acceptance:
+- все ID валидируются;
+- нет duplicate IDs;
+- GameConfig содержит ссылки.
+
+TASK 005 — SAFE AREA AND UI FOUNDATION
+Цель:
+Canvas prefab, SafeAreaFitter, button prefabs, modal base.
+
+Acceptance:
+- portrait scaling;
+- safe area обновляется;
+- button re-entry guard;
+- modal open/close base.
+
+TASK 006 — MAIN MENU
+Цель:
+Иерархия, MainMenuController, preview, settings.
+
+Acceptance:
+- Play -> Gameplay placeholder;
+- Collection -> Collection;
+- settings modal;
+- selected background отображается.
+
+TASK 007 — GAMEPLAY MODELS
+Цель:
+TileModel, BoardModel, TrayModel, MatchResolver, MoveSnapshot.
+
+Acceptance:
+- все EditMode tests;
+- тройка удаляется;
+- capacity 7;
+- undo rule;
+- no Unity UI dependency.
+
+TASK 008 — LEVEL TEMPLATES AND GENERATOR
+Цель:
+T01–T09, deterministic MVP generator, 25 LevelDefinition.
+
+Acceptance:
+- 25 asset files;
+- validation report;
+- каждый level solvable;
+- стабильные результаты.
+
+TASK 009 — TILE AND BOARD VIEWS
+Цель:
+TileView prefab, TileFactory, BoardView.
+
+Acceptance:
+- отображение LevelDefinition;
+- blocked/available states;
+- click available only;
+- no FindObjectOfType.
+
+TASK 010 — TRAY VIEW AND MOVE FLOW
+Цель:
+Перемещение в лоток, сортировка, match animation.
+
+Acceptance:
+- визуальный порядок совпадает с TrayModel;
+- input lock;
+- triple removal;
+- no orphan views.
+
+TASK 011 — WIN/LOSE FLOW
+Цель:
+Conditions, VictoryModal, FailModal, restart.
+
+Acceptance:
+- win only board+tray empty;
+- lose only stable tray full;
+- restart exact;
+- no duplicate completion reward.
+
+TASK 012 — BOOSTERS
+Цель:
+Hint, Undo, Shuffle.
+
+Acceptance:
+- rules from section B;
+- counts;
+- no impossible shuffle;
+- EditMode tests.
+
+TASK 013 — PUZZLE PROGRESSION
+Цель:
+PuzzleRoom, five pieces, milestone flow.
+
+Acceptance:
+- rewards at 5/10/15/20/25;
+- duplicate reward protection;
+- completion state;
+- background unlocks.
+
+TASK 014 — COLLECTION
+Цель:
+Five background cards, select/save.
+
+Acceptance:
+- locked/unlocked/selected states;
+- selected background persists;
+- MainMenu and Gameplay update.
+
+TASK 015 — AUDIO
+Цель:
+AudioService, mixer groups, settings.
+
+Acceptance:
+- no per-tile AudioSource;
+- pooled SFX;
+- save audio settings.
+
+TASK 016 — ADS ABSTRACTION
+Цель:
+IAdsService, MockAdsService, rewarded flow.
+
+Acceptance:
+- reward only Completed;
+- failed/skipped no reward;
+- busy state cleared.
+
+TASK 017 — ANALYTICS ABSTRACTION
+Цель:
+NoOp service and event calls.
+
+Acceptance:
+- no PII;
+- gameplay independent of SDK.
+
+TASK 018 — ART IMPORT AUTOMATION
+Цель:
+AssetPostprocessor, Sprite Atlas, move known assets.
+
+Acceptance:
+- correct import by folders;
+- idempotent;
+- GUID preserved with MoveAsset.
+
+TASK 019 — ART VALIDATION SCENE
+Цель:
+Preview, scale, backgrounds, 9-slice, animation.
+
+Acceptance:
+- select sprite;
+- show 96/112/128;
+- missing reference scan.
+
+TASK 020 — TUTORIAL
+Цель:
+Levels 1,3,8,12,18 tutorial steps.
+
+Acceptance:
+- action-based;
+- saved completion;
+- input masking.
+
+TASK 021 — YANDEX ADAPTER PLACEHOLDERS
+Цель:
+Interfaces and compile-safe placeholders only.
+
+Acceptance:
+- project runs without SDK;
+- future adapter isolated.
+
+TASK 022 — QA AND PREBUILD VALIDATION
+Цель:
+Build validator, missing scripts, missing sprites, IDs, scenes.
+
+Acceptance:
+- prebuild fails on critical invalid state;
+- report generated.
+
+TASK 023 — WEBGL BUILD BASELINE
+Цель:
+Пустой релизный WebGL build.
+
+Acceptance:
+- no compile errors;
+- all scenes load;
+- memory baseline documented;
+- no unsupported APIs.
+
+TASK 024 — FULL MVP INTEGRATION
+Цель:
+Соединить все подсистемы.
+
+Acceptance:
+- clean install -> level 1;
+- complete 25 levels;
+- all rewards;
+- save reload;
+- collection;
+- no blocker bugs.
+
+TASK 025 — RELEASE CANDIDATE
+Цель:
+Финальная очистка и RC build.
+
+Acceptance:
+- tests pass;
+- no missing refs;
+- no debug UI;
+- ArtValidation excluded;
+- version set;
+- WebGL build launches.
+
+================================================================================
+РАЗДЕЛ I. ПЕРВЫЙ ПРОМПТ ДЛЯ CODEX
+================================================================================
+
+Ты работаешь в Unity-проекте Tile Puzzle Home.
+Используй два документа:
+1. codex_master_spec_tile_puzzle_home.txt
+2. codex_development_start_pack_v1.txt
+
+Выполни только TASK 001 — PROJECT SCAFFOLD.
+
+Обязательные действия:
+1. Создай структуру Assets/_Project согласно Master Specification.
+2. Создай Runtime, Editor, EditMode и PlayMode asmdef.
+3. Создай Editor menu Tile Puzzle Home/Setup.
+4. Реализуй idempotent команды:
+   - Create Project Folders
+   - Create Default Scenes
+   - Create Build Settings
+   - Run Full Project Setup
+5. Создай сцены:
+   - Bootstrap
+   - MainMenu
+   - Gameplay
+   - PuzzleRoom
+   - Collection
+   - ArtValidation
+6. Создай корневую иерархию каждой сцены согласно Master Specification.
+7. Добавь Bootstrap, MainMenu, Gameplay, PuzzleRoom, Collection в Build Settings в правильном порядке.
+8. ArtValidation в Build Settings не добавляй.
+9. Не создавай gameplay logic.
+10. Не устанавливай пакеты.
+11. Не подключай Yandex SDK.
+12. Создай Documentation/Technical/project_structure.md.
+13. Проверь повторный Run Full Project Setup.
+14. Убедись, что проект компилируется.
+
+Формат ответа:
+- выполнено;
+- созданные файлы;
+- изменённые файлы;
+- проверки;
+- ограничения;
+- следующий безопасный шаг.
+
+КОНЕЦ ДОКУМЕНТА
